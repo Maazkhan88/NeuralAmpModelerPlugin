@@ -7,6 +7,7 @@
 #include <sstream> // std::stringstream
 #include <string> // std::string
 #include <unordered_map> // std::unordered_map
+#include <unordered_set> // std::unordered_set
 #include <utility> // std::pair
 #include <vector> // std::vector
 #include "IControls.h"
@@ -291,8 +292,8 @@ public:
 
   void OnAttached() override
   {
+    RecomputeColumns();
     Recalculate();
-    OpenSearchBox();
   }
 
   void Draw(IGraphics& g) override
@@ -309,6 +310,7 @@ public:
     const std::string countStr = std::to_string(mFiltered.size()) + " / " + std::to_string(mAllItems.size());
     g.DrawText(mStyle.labelText.WithAlign(EAlign::Far), countStr.c_str(), mSearchRect.GetPadded(-10.f, 0.f, -10.f, 0.f));
 
+    const IText cellText = mStyle.valueText.WithAlign(EAlign::Near);
     g.PathClipRegion(mGridRect);
     for (size_t i = 0; i < mCellRects.size(); i++)
     {
@@ -317,7 +319,18 @@ public:
         continue;
       const bool hovered = mHoveredIdx == static_cast<int>(i);
       g.FillRoundRect(hovered ? mStyle.colorSpec.GetColor(kPR) : mStyle.colorSpec.GetColor(kFG), r, 3.f);
-      g.DrawText(mStyle.valueText.WithAlign(EAlign::Center), mFiltered[i].first.c_str(), r.GetPadded(-4.f));
+      // Clip per-cell too: a truncated string can still measure slightly
+      // wider than the cell once drawn (font hinting/kerning), and without
+      // this a long label can bleed into the next column.
+      g.PathClipRegion(r);
+
+      const bool isFavorite = sFavorites.count(mFiltered[i].first) > 0;
+      const IColor heartColor = isFavorite ? ToneCastColors::ACCENT : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.4f);
+      DrawHeart(g, mHeartRects[i], isFavorite, heartColor);
+
+      const IRECT textRect = r.GetReducedFromLeft(mHeartRects[i].W() + 4.f).GetPadded(-4.f, 0.f, -6.f, 0.f);
+      g.DrawText(cellText, TruncateToFit(g, cellText, mFiltered[i].first, textRect.W()).c_str(), textRect);
+      g.PathClipRegion(mGridRect);
     }
     g.PathClipRegion();
 
@@ -331,6 +344,16 @@ public:
     {
       OpenSearchBox();
       return;
+    }
+
+    for (size_t i = 0; i < mHeartRects.size(); i++)
+    {
+      if (mHeartRects[i].Contains(x, y))
+      {
+        ToggleFavorite(mFiltered[i].first);
+        SetDirty(false);
+        return;
+      }
     }
 
     const int idx = HitTestCell(x, y);
@@ -383,6 +406,57 @@ public:
   }
 
 private:
+  // Truncate str with a trailing ellipsis until it measures within maxWidth.
+  // Needed because filenames routinely overflow a grid-cell column, and an
+  // unclipped/untruncated draw bleeds into neighboring cells.
+  // Drawn from two filled circles + a triangle rather than a Unicode glyph
+  // (U+2665/U+2661) — the bundled Roboto/Michroma fonts don't reliably
+  // include those glyphs, which was rendering as nothing at all.
+  static void DrawHeart(IGraphics& g, const IRECT& r, bool filled, const IColor& color)
+  {
+    const float cx = r.MW();
+    const float topY = r.T + r.H() * 0.32f;
+    const float lobeR = r.W() * 0.26f;
+    const float leftCx = cx - lobeR * 0.95f;
+    const float rightCx = cx + lobeR * 0.95f;
+    const float tipX = cx;
+    const float tipY = r.B - r.H() * 0.08f;
+    const float baseL = r.L + r.W() * 0.06f;
+    const float baseR = r.R - r.W() * 0.06f;
+
+    if (filled)
+    {
+      g.FillCircle(color, leftCx, topY, lobeR);
+      g.FillCircle(color, rightCx, topY, lobeR);
+      g.FillTriangle(color, baseL, topY, baseR, topY, tipX, tipY);
+    }
+    else
+    {
+      g.DrawCircle(color, leftCx, topY, lobeR, nullptr, 1.2f);
+      g.DrawCircle(color, rightCx, topY, lobeR, nullptr, 1.2f);
+      g.DrawLine(color, baseL, topY, tipX, tipY, nullptr, 1.2f);
+      g.DrawLine(color, baseR, topY, tipX, tipY, nullptr, 1.2f);
+    }
+  }
+
+  static std::string TruncateToFit(IGraphics& g, const IText& text, const std::string& str, float maxWidth)
+  {
+    IRECT measured;
+    if (g.MeasureText(text, str.c_str(), measured) <= maxWidth || str.size() <= 1)
+      return str;
+
+    const std::string ellipsis = "...";
+    std::string candidate = str;
+    while (candidate.size() > 1)
+    {
+      candidate.pop_back();
+      const std::string withEllipsis = candidate + ellipsis;
+      if (g.MeasureText(text, withEllipsis.c_str(), measured) <= maxWidth)
+        return withEllipsis;
+    }
+    return ellipsis;
+  }
+
   int HitTestCell(float x, float y) const
   {
     if (!mGridRect.Contains(x, y))
@@ -409,33 +483,75 @@ private:
       if (lowerFilter.empty() || lowerName.find(lowerFilter) != std::string::npos)
         mFiltered.push_back(item);
     }
+    // Favorited items float to the top (stable: otherwise preserves the
+    // scanned order), so favoriting is actually useful for finding things
+    // faster instead of just being a decoration.
+    std::stable_partition(mFiltered.begin(), mFiltered.end(),
+                          [](const auto& item) { return sFavorites.count(item.first) > 0; });
     mScrollOffset = 0.f;
+    RecomputeColumns();
     Recalculate();
+  }
+
+  void ToggleFavorite(const std::string& name)
+  {
+    if (sFavorites.count(name) > 0)
+      sFavorites.erase(name);
+    else
+      sFavorites.insert(name);
+    ApplyFilter();
+  }
+
+  // How many columns fit if every column is wide enough to show the
+  // longest name in the current list without truncating it. Only called
+  // when the filtered set changes (not on every scroll tick) since
+  // MeasureText isn't free over hundreds of items.
+  void RecomputeColumns()
+  {
+    const float heartW = 24.f;
+    const float cellPad = heartW + 20.f; // heart + text insets
+    float widestText = 90.f; // floor, so a short/empty list doesn't get one giant column
+    if (IGraphics* ui = GetUI())
+    {
+      IRECT measured;
+      for (const auto& item : mFiltered)
+        widestText = std::max(widestText, ui->MeasureText(mStyle.valueText, item.first.c_str(), measured));
+    }
+    const float availableW = mGridRect.W() > 0.f ? mGridRect.W() : mRECT.W();
+    const float idealCellW = widestText + cellPad;
+    mNumCols = std::max(1, static_cast<int>(availableW / idealCellW));
   }
 
   void Recalculate()
   {
-    mPanelRect = mRECT.GetCentredInside(mRECT.W() * 0.7f, mRECT.H() * 0.75f);
+    // As big as the window will allow — user asked for "way bigger than
+    // the actual app size"; this is the biggest this overlay can be
+    // without literally resizing the platform window.
+    mPanelRect = mRECT.GetPadded(-8.f);
     mSearchRect = mPanelRect.GetFromTop(40.f).GetPadded(-10.f);
     mGridRect = mPanelRect.GetReducedFromTop(50.f).GetPadded(-10.f);
 
-    const float cellW = mGridRect.W() / static_cast<float>(kNumCols);
+    const float cellW = mGridRect.W() / static_cast<float>(mNumCols);
     const float cellH = 32.f;
+    const float heartW = 24.f;
     mRowHeight = cellH + 6.f;
 
     mCellRects.clear();
+    mHeartRects.clear();
     for (size_t i = 0; i < mFiltered.size(); i++)
     {
-      const int col = static_cast<int>(i) % kNumCols;
-      const int row = static_cast<int>(i) / kNumCols;
+      const int col = static_cast<int>(i) % mNumCols;
+      const int row = static_cast<int>(i) / mNumCols;
       const float top = mGridRect.T + static_cast<float>(row) * mRowHeight - mScrollOffset;
-      mCellRects.push_back(IRECT(mGridRect.L + col * cellW + 2.f, top, mGridRect.L + (col + 1) * cellW - 2.f, top + cellH));
+      const IRECT cell(mGridRect.L + col * cellW + 2.f, top, mGridRect.L + (col + 1) * cellW - 2.f, top + cellH);
+      mCellRects.push_back(cell);
+      mHeartRects.push_back(cell.GetFromLeft(heartW).GetPadded(-2.f));
     }
   }
 
   void ClampScroll()
   {
-    const int numRows = static_cast<int>(std::ceil(static_cast<float>(mFiltered.size()) / kNumCols));
+    const int numRows = static_cast<int>(std::ceil(static_cast<float>(mFiltered.size()) / mNumCols));
     const float contentHeight = numRows * mRowHeight;
     const float maxScroll = std::max(0.f, contentHeight - mGridRect.H());
     mScrollOffset = Clip(mScrollOffset, 0.f, maxScroll);
@@ -443,18 +559,26 @@ private:
 
   void Dismiss() { GetUI()->RemoveControl(this); }
 
-  static constexpr int kNumCols = 5; // "4-5 rows [columns]" per user request
+  int mNumCols = 1; // recomputed by RecomputeColumns() so columns stay wide enough for full names
 
   IVStyle mStyle;
   std::function<void(int)> mOnSelectIndex;
   std::vector<std::pair<std::string, int>> mAllItems; // display text, original IPopupMenu::Item index
   std::vector<std::pair<std::string, int>> mFiltered;
   std::vector<IRECT> mCellRects;
+  std::vector<IRECT> mHeartRects; // parallel to mCellRects; left-hand favorite-toggle hit area
   std::string mFilter;
   IRECT mPanelRect, mSearchRect, mGridRect;
   float mScrollOffset = 0.f;
   float mRowHeight = 36.f;
   int mHoveredIdx = -1;
+
+  // Session-only favorites, keyed by display name, shared across every
+  // instance of this overlay (so favoriting a model persists for the rest
+  // of the run even after the overlay is closed and reopened). Resets on
+  // app restart — real persistence belongs to the future file-cache/preset
+  // system (tonecast-windows-dev-plan.md Phase 2), not invented ad hoc here.
+  static inline std::unordered_set<std::string> sFavorites;
 };
 
 class NAMFileBrowserControl : public IDirBrowseControlBase

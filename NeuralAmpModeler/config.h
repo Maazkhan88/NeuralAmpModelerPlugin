@@ -27,8 +27,12 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #define PLUG_HAS_UI 1
-#define PLUG_WIDTH 600
-#define PLUG_HEIGHT 400
+// ToneCast (Task 3.1): was 600x400. Bigger default canvas gives the
+// searchable model/IR picker (which fills ~the whole window) real room to
+// show a grid instead of one cramped screenful. See docs/decisions-log.md
+// for why this was done instead of resizing the window on demand.
+#define PLUG_WIDTH 900
+#define PLUG_HEIGHT 650
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0
