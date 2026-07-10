@@ -1,9 +1,14 @@
 #pragma once
 
-#include <cmath> // std::round
+#include <algorithm> // std::transform, std::min
+#include <cmath> // std::round, std::ceil
 #include <cstdio> // FILE, fclose
+#include <functional> // std::function
 #include <sstream> // std::stringstream
+#include <string> // std::string
 #include <unordered_map> // std::unordered_map
+#include <utility> // std::pair
+#include <vector> // std::vector
 #include "IControls.h"
 #include "IPlugPaths.h"
 
@@ -261,6 +266,197 @@ public:
   }
 };
 
+// ToneCast (Task 3.1 follow-up): a searchable, multi-column replacement for
+// the plain native/single-column popup menu that NAMFileBrowserControl used
+// for its model/IR list. Self-contained: draws its own backdrop, search
+// box, and item grid rather than spawning child IControls, similar in
+// spirit to how iPlug2's own IPopupMenuControl hit-tests manually.
+// Filtering commits when the search box loses focus/Enter is pressed
+// (iPlug2's CreateTextEntry doesn't offer live per-keystroke callbacks),
+// which is still a large improvement over scrolling a single long list.
+class NAMFileSearchOverlayControl : public IControl
+{
+public:
+  NAMFileSearchOverlayControl(const IRECT& bounds, const IVStyle& style, const WDL_PtrList<IPopupMenu::Item>& items,
+                              std::function<void(int)> onSelectIndex)
+  : IControl(bounds)
+  , mStyle(style)
+  , mOnSelectIndex(onSelectIndex)
+  {
+    mIgnoreMouse = false;
+    for (int i = 0; i < items.GetSize(); i++)
+      mAllItems.push_back({items.Get(i)->GetText(), i});
+    mFiltered = mAllItems;
+  }
+
+  void OnAttached() override
+  {
+    Recalculate();
+    OpenSearchBox();
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.FillRect(COLOR_BLACK.WithOpacity(0.65f), mRECT);
+    g.FillRoundRect(mStyle.colorSpec.GetColor(kBG), mPanelRect, 8.f);
+    g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mPanelRect, 8.f, nullptr, 1.f);
+
+    g.FillRoundRect(mStyle.colorSpec.GetColor(kFG), mSearchRect, 4.f);
+    g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mSearchRect, 4.f, nullptr, 1.f);
+    const std::string display = mFilter.empty() ? std::string("Type to search...") : mFilter;
+    g.DrawText(mStyle.valueText.WithAlign(EAlign::Near), display.c_str(), mSearchRect.GetPadded(-10.f, 0.f, -10.f, 0.f));
+
+    const std::string countStr = std::to_string(mFiltered.size()) + " / " + std::to_string(mAllItems.size());
+    g.DrawText(mStyle.labelText.WithAlign(EAlign::Far), countStr.c_str(), mSearchRect.GetPadded(-10.f, 0.f, -10.f, 0.f));
+
+    g.PathClipRegion(mGridRect);
+    for (size_t i = 0; i < mCellRects.size(); i++)
+    {
+      const auto& r = mCellRects[i];
+      if (!r.Intersects(mGridRect))
+        continue;
+      const bool hovered = mHoveredIdx == static_cast<int>(i);
+      g.FillRoundRect(hovered ? mStyle.colorSpec.GetColor(kPR) : mStyle.colorSpec.GetColor(kFG), r, 3.f);
+      g.DrawText(mStyle.valueText.WithAlign(EAlign::Center), mFiltered[i].first.c_str(), r.GetPadded(-4.f));
+    }
+    g.PathClipRegion();
+
+    if (mFiltered.empty())
+      g.DrawText(mStyle.labelText, "No matches", mGridRect);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mSearchRect.Contains(x, y))
+    {
+      OpenSearchBox();
+      return;
+    }
+
+    const int idx = HitTestCell(x, y);
+    if (idx >= 0)
+    {
+      mOnSelectIndex(mFiltered[idx].second);
+      Dismiss();
+      return;
+    }
+
+    if (!mPanelRect.Contains(x, y))
+      Dismiss();
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    mHoveredIdx = HitTestCell(x, y);
+    SetDirty(false);
+  }
+
+  void OnMouseOut() override
+  {
+    mHoveredIdx = -1;
+    SetDirty(false);
+  }
+
+  void OnMouseWheel(float x, float y, const IMouseMod& mod, float d) override
+  {
+    mScrollOffset -= d * mRowHeight;
+    ClampScroll();
+    Recalculate();
+    SetDirty(false);
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    if (key.VK == kVK_ESCAPE)
+    {
+      Dismiss();
+      return true;
+    }
+    return false;
+  }
+
+  void OnTextEntryCompletion(const char* str, int valIdx) override
+  {
+    mFilter = str ? str : "";
+    ApplyFilter();
+    SetDirty(false);
+  }
+
+private:
+  int HitTestCell(float x, float y) const
+  {
+    if (!mGridRect.Contains(x, y))
+      return -1;
+    for (size_t i = 0; i < mCellRects.size(); i++)
+    {
+      if (mCellRects[i].Contains(x, y))
+        return static_cast<int>(i);
+    }
+    return -1;
+  }
+
+  void OpenSearchBox() { GetUI()->CreateTextEntry(*this, mStyle.valueText, mSearchRect, mFilter.c_str()); }
+
+  void ApplyFilter()
+  {
+    mFiltered.clear();
+    std::string lowerFilter = mFilter;
+    std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(), ::tolower);
+    for (const auto& item : mAllItems)
+    {
+      std::string lowerName = item.first;
+      std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+      if (lowerFilter.empty() || lowerName.find(lowerFilter) != std::string::npos)
+        mFiltered.push_back(item);
+    }
+    mScrollOffset = 0.f;
+    Recalculate();
+  }
+
+  void Recalculate()
+  {
+    mPanelRect = mRECT.GetCentredInside(mRECT.W() * 0.7f, mRECT.H() * 0.75f);
+    mSearchRect = mPanelRect.GetFromTop(40.f).GetPadded(-10.f);
+    mGridRect = mPanelRect.GetReducedFromTop(50.f).GetPadded(-10.f);
+
+    const float cellW = mGridRect.W() / static_cast<float>(kNumCols);
+    const float cellH = 32.f;
+    mRowHeight = cellH + 6.f;
+
+    mCellRects.clear();
+    for (size_t i = 0; i < mFiltered.size(); i++)
+    {
+      const int col = static_cast<int>(i) % kNumCols;
+      const int row = static_cast<int>(i) / kNumCols;
+      const float top = mGridRect.T + static_cast<float>(row) * mRowHeight - mScrollOffset;
+      mCellRects.push_back(IRECT(mGridRect.L + col * cellW + 2.f, top, mGridRect.L + (col + 1) * cellW - 2.f, top + cellH));
+    }
+  }
+
+  void ClampScroll()
+  {
+    const int numRows = static_cast<int>(std::ceil(static_cast<float>(mFiltered.size()) / kNumCols));
+    const float contentHeight = numRows * mRowHeight;
+    const float maxScroll = std::max(0.f, contentHeight - mGridRect.H());
+    mScrollOffset = Clip(mScrollOffset, 0.f, maxScroll);
+  }
+
+  void Dismiss() { GetUI()->RemoveControl(this); }
+
+  static constexpr int kNumCols = 5; // "4-5 rows [columns]" per user request
+
+  IVStyle mStyle;
+  std::function<void(int)> mOnSelectIndex;
+  std::vector<std::pair<std::string, int>> mAllItems; // display text, original IPopupMenu::Item index
+  std::vector<std::pair<std::string, int>> mFiltered;
+  std::vector<IRECT> mCellRects;
+  std::string mFilter;
+  IRECT mPanelRect, mSearchRect, mGridRect;
+  float mScrollOffset = 0.f;
+  float mRowHeight = 36.f;
+  int mHoveredIdx = -1;
+};
+
 class NAMFileBrowserControl : public IDirBrowseControlBase
 {
 public:
@@ -387,7 +583,13 @@ public:
         {
           mMainMenu.SetChosenItemIdx(mSelectedItemIndex);
         }
-        pCaller->GetUI()->CreatePopupMenu(*this, mMainMenu, pCaller->GetRECT());
+        // ToneCast (Task 3.1 follow-up): searchable, multi-column overlay
+        // instead of the platform-native single-column scrolling menu.
+        pCaller->GetUI()->AttachControl(new NAMFileSearchOverlayControl(
+          pCaller->GetUI()->GetBounds(), mStyle, mItems, [this](int idx) {
+            mSelectedItemIndex = idx;
+            LoadFileAtCurrentIndex();
+          }));
       }
     };
 
