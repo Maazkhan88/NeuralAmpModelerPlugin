@@ -82,4 +82,24 @@ const iplug::igraphics::IColor HELP_TEXT_CLICKED = iplug::igraphics::COLOR_WHITE
 
 }; // namespace PluginColors
 
+// ToneCast's own vector-drawn theme (Task 3.1). Kept separate from
+// PluginColors (upstream's original bitmap-era palette) so it's obvious
+// which constants are ours and so upstream's original colors stay
+// available for reference/rollback. Derived from webui/ concept mockups:
+// near-black warm background, amber/orange accent from the logo, cream text.
+namespace ToneCastColors
+{
+const iplug::igraphics::IColor BACKGROUND(255, 23, 19, 16); // Near-black warm charcoal
+const iplug::igraphics::IColor PANEL(255, 33, 28, 24); // Slightly lighter panel fill (knob/switch/meter backdrops)
+const iplug::igraphics::IColor ACCENT(255, 224, 130, 62); // Amber/orange, from the ToneCast logo
+const iplug::igraphics::IColor ACCENT_DIM(255, 224, 130, 62); // Same hue, used with .WithOpacity() at call sites
+// NOTE: not named TEXT — <windows.h> #defines TEXT as a macro, which would
+// silently mangle this identifier wherever the header is included.
+const iplug::igraphics::IColor FG_TEXT(255, 240, 232, 222); // Warm cream
+const iplug::igraphics::IColor FG_TEXT_MUTED(255, 158, 148, 138); // Muted warm gray for secondary text
+const iplug::igraphics::IColor FRAME = ACCENT.WithOpacity(0.35f);
+const iplug::igraphics::IColor SHADOW(255, 8, 6, 5);
+const iplug::igraphics::IColor MOUSEOVER = FG_TEXT.WithOpacity(0.08f);
+} // namespace ToneCastColors
+
 #endif /* Colors_h */

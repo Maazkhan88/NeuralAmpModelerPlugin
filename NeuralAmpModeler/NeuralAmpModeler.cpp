@@ -23,24 +23,27 @@ using namespace igraphics;
 const double kDCBlockerFrequency = 5.0;
 
 // Styles
+// ToneCast's vector-drawn theme (Task 3.1) — see Colors.h, namespace
+// ToneCastColors. Background/Foreground/etc. below map onto iPlug2's
+// IVColorSpec slots (kBG, kFG, kPR, kFR, kHL, kSH, kX1, kX2, kX3).
 const IVColorSpec colorSpec{
-  DEFAULT_BGCOLOR, // Background
-  PluginColors::NAM_THEMECOLOR, // Foreground
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.3f), // Pressed
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.4f), // Frame
-  PluginColors::MOUSEOVER, // Highlight
-  DEFAULT_SHCOLOR, // Shadow
-  PluginColors::NAM_THEMECOLOR, // Extra 1
+  ToneCastColors::BACKGROUND, // Background
+  ToneCastColors::PANEL, // Foreground (knob/switch/meter body fill)
+  ToneCastColors::ACCENT.WithOpacity(0.55f), // Pressed
+  ToneCastColors::FRAME, // Frame
+  ToneCastColors::MOUSEOVER, // Highlight
+  ToneCastColors::SHADOW, // Shadow
+  ToneCastColors::ACCENT, // Extra 1 (knob pointer / active fill)
   COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::NAM_THEMECOLOR.WithContrast(0.1f), // Extra 3
+  ToneCastColors::ACCENT.WithContrast(0.1f), // Extra 3
 };
 
 const IVStyle style =
   IVStyle{true, // Show label
           true, // Show value
           colorSpec,
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, PluginColors::NAM_THEMEFONTCOLOR}, // Knob label text5
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, PluginColors::NAM_THEMEFONTCOLOR}, // Knob value text
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, ToneCastColors::FG_TEXT}, // Knob label text
+          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, ToneCastColors::FG_TEXT}, // Knob value text
           DEFAULT_HIDE_CURSOR,
           DEFAULT_DRAW_FRAME,
           false,
@@ -50,13 +53,14 @@ const IVStyle style =
           DEFAULT_SHADOW_OFFSET,
           DEFAULT_WIDGET_FRAC,
           DEFAULT_WIDGET_ANGLE};
-const IVStyle titleStyle =
-  DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
+const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, ToneCastColors::FG_TEXT, "Michroma-Regular"))
+                             .WithDrawFrame(false)
+                             .WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
   style
-    .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+    .WithColor(EVColor::kON, ToneCastColors::ACCENT) // Pressed buttons and their labels
+    .WithColor(EVColor::kOFF, ToneCastColors::ACCENT.WithOpacity(0.1f)) // Unpressed buttons
+    .WithColor(EVColor::kX1, ToneCastColors::ACCENT.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -129,13 +133,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto irIconOffSVG = pGraphics->LoadSVG(IR_ICON_OFF_FN);
     const auto slimIconSVG = pGraphics->LoadSVG(SLIMMABLE_ICON_FN);
 
+    // ToneCast (Task 3.1): the main view below is now drawn entirely with
+    // iPlug2's vector-drawn IVControls (no bitmap textures) using the
+    // ToneCastColors palette from Colors.h. backgroundBitmap,
+    // inputLevelBackgroundBitmap, and switchHandleBitmap are still loaded
+    // because the settings/about sub-page (NAMSettingsPageControl, opened
+    // via the gear icon) hasn't been reskinned yet in this pass — see
+    // docs/decisions-log.md and tonecast-windows-dev-plan.md Task 3.1.
     const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
     const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
     const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
-    const auto linesBitmap = pGraphics->LoadBitmap(LINES_FN);
-    const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
-    const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
 
     const auto b = pGraphics->GetBounds();
     const auto mainArea = b.GetPadded(-20);
@@ -215,9 +223,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     };
 
-    pGraphics->AttachBackground(BACKGROUND_FN);
-    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
+    pGraphics->AttachControl(new IPanelControl(b, ToneCastColors::BACKGROUND));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "TONECAST", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -264,24 +271,42 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl),
       kCtrlTagIRFileBrowser);
-    pGraphics->AttachControl(
-      new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
-    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
+    // ToneCast (Task 3.1): stock vector-drawn IVControls, no bitmap
+    // textures. Style tweaks below mirror what NAMSwitchControl /
+    // NAMKnobControl / NAMMeterControl used to add on top of these same
+    // base classes, minus the bitmap overlay.
+    const auto switchStyle = style.WithRoundness(0.666f)
+                                .WithShowValue(false)
+                                .WithEmboss(true)
+                                .WithShadowOffset(1.5f)
+                                .WithDrawShadows(false)
+                                .WithColor(kFR, COLOR_BLACK)
+                                .WithFrameThickness(0.5f)
+                                .WithWidgetFrac(0.5f)
+                                .WithLabelOrientation(EOrientation::South);
+    pGraphics->AttachControl(new IVSlideSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", switchStyle));
+    pGraphics->AttachControl(new IVSlideSwitchControl(eqToggleArea, kEQActive, "EQ", switchStyle));
 
     // The knobs
-    pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(
-      new NAMKnobControl(bassKnobArea, kToneBass, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(
-      new NAMKnobControl(midKnobArea, kToneMid, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(
-      new NAMKnobControl(trebleKnobArea, kToneTreble, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new IVKnobControl(inputKnobArea, kInputLevel, "", style, true));
+    pGraphics->AttachControl(new IVKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, true));
+    pGraphics->AttachControl(new IVKnobControl(bassKnobArea, kToneBass, "", style, true), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(new IVKnobControl(midKnobArea, kToneMid, "", style, true), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(new IVKnobControl(trebleKnobArea, kToneTreble, "", style, true), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(new IVKnobControl(outputKnobArea, kOutputLevel, "", style, true));
 
     // The meters
-    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
-    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
+    constexpr float kMeterMin = -70.0f;
+    constexpr float kMeterMax = -0.01f;
+    const auto meterStyle = style.WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.8f);
+    pGraphics->AttachControl(
+      new IVPeakAvgMeterControl<>(inputMeterArea, "", meterStyle, EDirection::Vertical, {}, 0, kMeterMin, kMeterMax,
+                                  {}),
+      kCtrlTagInputMeter);
+    pGraphics->AttachControl(
+      new IVPeakAvgMeterControl<>(outputMeterArea, "", meterStyle, EDirection::Vertical, {}, 0, kMeterMin, kMeterMax,
+                                  {}),
+      kCtrlTagOutputMeter);
 
     // Settings/help/about box
     pGraphics->AttachControl(new NAMCircleButtonControl(
@@ -300,8 +325,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
     pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
       ->Hide(true);
-    pGraphics
-      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Slim", style, knobBackgroundBitmap), kCtrlTagSlimKnob)
+    pGraphics->AttachControl(new IVKnobControl(slimKnobArea, kSlim, "Slim", style, true), kCtrlTagSlimKnob)
       ->Hide(true);
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {

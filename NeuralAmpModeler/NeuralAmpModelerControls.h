@@ -286,7 +286,15 @@ public:
     mIgnoreMouse = true;
   }
 
-  void Draw(IGraphics& g) override { g.DrawFittedBitmap(mBitmap, mRECT); }
+  // ToneCast (Task 3.1): vector-drawn box instead of a bitmap texture
+  // (mBitmap is still stored/passed in for now, unused here — see
+  // docs/decisions-log.md).
+  void Draw(IGraphics& g) override
+  {
+    const float radius = 4.f;
+    g.FillRoundRect(mStyle.colorSpec.GetColor(kBG), mRECT, radius);
+    g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mRECT, radius, nullptr, 1.f);
+  }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
   {
