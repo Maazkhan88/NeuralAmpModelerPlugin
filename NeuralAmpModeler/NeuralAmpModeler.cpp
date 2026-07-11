@@ -353,16 +353,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // ToneCast (Task 3.1): library panel toggle, mirrors the settings gear's
     // corner position on the opposite (top-left) side. Docked drawer, hidden
     // by default per the user's requested toggle-not-always-visible behavior.
+    // The panel itself is attached at full-canvas bounds `b` (not just the
+    // visible 300px sidebar) so clicking anywhere outside the sidebar
+    // reliably closes it -- see NAMLibraryPanelControl's Draw()/
+    // OnMouseDown() for the sidebar-vs-backdrop split.
     const auto libraryToggleArea =
       b.GetPadded(-20).GetFromTLHC(50.f, 50.f).GetCentredInside(20.f, 20.f);
-    const auto libraryPanelArea = IRECT(0.f, 90.f, 300.f, b.B);
     pGraphics->AttachControl(new NAMLibraryToggleButtonControl(libraryToggleArea, [pGraphics](IControl* pCaller) {
       auto* panel = pGraphics->GetControlWithTag(kCtrlTagLibraryPanel);
       panel->Hide(!panel->IsHidden());
     }));
-    pGraphics
-      ->AttachControl(new NAMLibraryPanelControl(libraryPanelArea, style), kCtrlTagLibraryPanel)
-      ->Hide(true);
+    pGraphics->AttachControl(new NAMLibraryPanelControl(b, style), kCtrlTagLibraryPanel)->Hide(true);
     static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
       ->SetBrowsers(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>(),
                     pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>());

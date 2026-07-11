@@ -1085,8 +1085,16 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    g.FillRect(ToneCastColors::BACKGROUND.WithOpacity(0.98f), mRECT);
-    g.DrawLine(mStyle.colorSpec.GetColor(kFR), mRECT.R, mRECT.T, mRECT.R, mRECT.B, nullptr, 1.f);
+    // Bounds are the FULL canvas (see attachment in NeuralAmpModeler.cpp) so
+    // that clicking anywhere outside the opaque sidebar reliably closes the
+    // panel -- a narrower hit area made it possible for the panel to end up
+    // effectively unclosable depending on exactly where the toggle button
+    // sat relative to it. The dim backdrop covers everything; the actual
+    // sidebar content only occupies mSidebarRect on the left.
+    g.FillRect(COLOR_BLACK.WithOpacity(0.35f), mRECT);
+    g.FillRect(ToneCastColors::BACKGROUND.WithOpacity(0.99f), mSidebarRect);
+    g.DrawLine(mStyle.colorSpec.GetColor(kFR), mSidebarRect.R, mSidebarRect.T, mSidebarRect.R, mSidebarRect.B, nullptr,
+               1.f);
 
     g.DrawText(mStyle.valueText.WithAlign(EAlign::Near).WithSize(18.f), "LIBRARY",
                mTitleRect.GetPadded(-12.f, 0.f, 0.f, 0.f));
@@ -1147,7 +1155,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (mCloseRect.Contains(x, y))
+    if (mCloseRect.Contains(x, y) || !mSidebarRect.Contains(x, y))
     {
       Hide(true);
       return;
@@ -1229,11 +1237,16 @@ private:
     bool isIR;
   };
 
-  static void DrawCloseGlyph(IGraphics& g, const IRECT& r)
+  void DrawCloseGlyph(IGraphics& g, const IRECT& r) const
   {
+    // Filled circular backdrop so this reads as an obvious button, not
+    // just two thin lines that are easy to miss against a dark panel.
+    g.FillEllipse(mStyle.colorSpec.GetColor(kFG), r);
+    g.DrawEllipse(mStyle.colorSpec.GetColor(kFR), r, nullptr, 1.f);
+    const IRECT glyph = r.GetPadded(-6.f);
     const IColor c = ToneCastColors::FG_TEXT;
-    g.DrawLine(c, r.L, r.T, r.R, r.B, nullptr, 1.5f);
-    g.DrawLine(c, r.L, r.B, r.R, r.T, nullptr, 1.5f);
+    g.DrawLine(c, glyph.L, glyph.T, glyph.R, glyph.B, nullptr, 1.75f);
+    g.DrawLine(c, glyph.L, glyph.B, glyph.R, glyph.T, nullptr, 1.75f);
   }
 
   void RefreshItems()
@@ -1325,20 +1338,24 @@ private:
 
   void Recalculate()
   {
-    mTitleRect = mRECT.GetFromTop(40.f);
-    mCloseRect = mTitleRect.GetFromRight(30.f).GetPadded(-10.f);
+    // Opaque sidebar is only the left portion of the full-canvas mRECT; the
+    // remainder is the click-to-dismiss backdrop (see Draw()/OnMouseDown()).
+    mSidebarRect = mRECT.GetFromLeft(300.f);
+
+    mTitleRect = mSidebarRect.GetFromTop(40.f);
+    mCloseRect = mTitleRect.GetFromRight(40.f).GetPadded(-8.f);
 
     mFilterRects.clear();
     float filterTop = mTitleRect.B + 4.f;
     for (int i = 0; i < 6; i++)
     {
-      mFilterRects.emplace_back(mRECT.L + 8.f, filterTop, mRECT.R - 8.f, filterTop + 30.f);
+      mFilterRects.emplace_back(mSidebarRect.L + 8.f, filterTop, mSidebarRect.R - 8.f, filterTop + 30.f);
       filterTop += 33.f;
     }
 
-    mSearchRect = IRECT(mRECT.L + 8.f, filterTop + 6.f, mRECT.R - 8.f, filterTop + 40.f);
-    mCountRect = IRECT(mRECT.L + 8.f, mSearchRect.B + 2.f, mRECT.R - 8.f, mSearchRect.B + 18.f);
-    mListRect = IRECT(mRECT.L + 8.f, mCountRect.B + 4.f, mRECT.R - 8.f, mRECT.B - 8.f);
+    mSearchRect = IRECT(mSidebarRect.L + 8.f, filterTop + 6.f, mSidebarRect.R - 8.f, filterTop + 40.f);
+    mCountRect = IRECT(mSidebarRect.L + 8.f, mSearchRect.B + 2.f, mSidebarRect.R - 8.f, mSearchRect.B + 18.f);
+    mListRect = IRECT(mSidebarRect.L + 8.f, mCountRect.B + 4.f, mSidebarRect.R - 8.f, mSidebarRect.B - 8.f);
 
     const float rowH = 30.f;
     const float starW = 20.f;
@@ -1372,7 +1389,7 @@ private:
   std::vector<LibraryItem> mFiltered;
   std::vector<IRECT> mRowRects, mStarRects, mTypeRects, mFilterRects;
   std::string mFilter;
-  IRECT mTitleRect, mCloseRect, mSearchRect, mCountRect, mListRect;
+  IRECT mSidebarRect, mTitleRect, mCloseRect, mSearchRect, mCountRect, mListRect;
   float mScrollOffset = 0.f;
   float mRowHeight = 34.f;
   int mHoveredIdx = -1;
