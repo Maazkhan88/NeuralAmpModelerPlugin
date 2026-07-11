@@ -104,6 +104,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   // any, without opening a browser. Runs on a background thread (see
   // Tone3000OAuth.cpp) so this doesn't block plugin construction.
   mTone3000Auth.TryResume();
+
+  // The download itself runs on a background thread; onInstall only
+  // stashes the result for OnIdle() (UI thread) to actually stage --
+  // see the mTone3000PendingInstall comment in NeuralAmpModeler.h.
+  mTone3000Browser.Configure(
+    [this]() { return mTone3000Auth.GetAccessToken(); },
+    [this](const std::string& path, const std::string& format) {
+      std::lock_guard<std::mutex> lock(mTone3000InstallMutex);
+      mTone3000PendingInstall = std::make_pair(path, format);
+    });
 #endif
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
@@ -398,6 +408,50 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
           }
           return "Connect TONE3000";
         });
+
+    // ToneCast: TONE3000 "browse and download" affordance for the
+    // library panel's TONE3000 tab. mTone3000Browser does the actual
+    // network work on background threads (see Tone3000Browser.h);
+    // GetResults() here just converts its typed results into the
+    // shared-UI NAMRemoteItem struct on every poll.
+    static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
+      ->SetRemoteBrowseHandler(
+        [this]() { return mTone3000Auth.GetStatus() == tone3000::AuthStatus::SignedIn; },
+        [this](const std::string& query) { mTone3000Browser.Search(query); },
+        [this]() -> std::vector<NAMRemoteItem> {
+          std::vector<NAMRemoteItem> out;
+          for (const auto& r : mTone3000Browser.GetResults())
+          {
+            NAMRemoteItem item;
+            item.id = std::to_string(r.toneId);
+            item.title = r.title;
+            item.subtitle = r.format.empty() ? r.gear : r.format;
+            std::transform(item.subtitle.begin(), item.subtitle.end(), item.subtitle.begin(), ::toupper);
+            item.downloadable = r.downloadable;
+            switch (r.downloadState)
+            {
+              case tone3000::ResultItem::DownloadState::NotDownloaded:
+                item.state = NAMRemoteItemState::NotDownloaded;
+                break;
+              case tone3000::ResultItem::DownloadState::Downloading: item.state = NAMRemoteItemState::Downloading; break;
+              case tone3000::ResultItem::DownloadState::Downloaded: item.state = NAMRemoteItemState::Downloaded; break;
+              case tone3000::ResultItem::DownloadState::Failed: item.state = NAMRemoteItemState::Failed; break;
+            }
+            out.push_back(std::move(item));
+          }
+          return out;
+        },
+        [this]() -> std::string {
+          switch (mTone3000Browser.GetSearchState())
+          {
+            case tone3000::SearchState::Searching: return "Searching...";
+            case tone3000::SearchState::Error: return mTone3000Browser.GetSearchError();
+            case tone3000::SearchState::Ready:
+              return std::to_string(mTone3000Browser.GetResults().size()) + " results";
+            default: return "";
+          }
+        },
+        [this](const std::string& id) { mTone3000Browser.Download(std::stoi(id)); });
 #endif
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -547,6 +601,27 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
+
+#ifdef APP_API
+  // Pick up a TONE3000 download finished on a background thread (see
+  // Tone3000Browser.cpp) and stage it here on the UI thread -- see the
+  // mTone3000PendingInstall comment in NeuralAmpModeler.h for why this
+  // can't just be called from the download thread directly.
+  std::optional<std::pair<std::string, std::string>> pendingInstall;
+  {
+    std::lock_guard<std::mutex> lock(mTone3000InstallMutex);
+    pendingInstall = std::move(mTone3000PendingInstall);
+    mTone3000PendingInstall.reset();
+  }
+  if (pendingInstall)
+  {
+    const WDL_String path(pendingInstall->first.c_str());
+    if (pendingInstall->second == "ir")
+      _StageIR(path);
+    else
+      _StageModel(path);
+  }
+#endif
 }
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const

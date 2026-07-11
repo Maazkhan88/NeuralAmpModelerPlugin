@@ -22,6 +22,10 @@
 // VST3 build in two independent ways.
 #ifdef APP_API
 #include "tone3000-client/Tone3000OAuth.h"
+#include "tone3000-client/Tone3000Browser.h"
+#include <mutex>
+#include <optional>
+#include <utility>
 #endif
 
 
@@ -338,5 +342,17 @@ private:
 
 #ifdef APP_API
   tone3000::OAuthFlow mTone3000Auth;
+  tone3000::Browser mTone3000Browser;
+
+  // A TONE3000 download finishes on a background thread (see
+  // Tone3000Browser.cpp), but staging a model/IR touches state
+  // (mStagedModel etc.) that's only safe to write from the UI thread --
+  // the same reason the existing file-browser completion handlers only
+  // ever run from UI-thread callbacks. The download thread stashes the
+  // result here; OnIdle() (UI thread) picks it up and calls
+  // _StageModel/_StageIR, mirroring the existing mNewModelLoadedInDSP
+  // hand-off pattern.
+  std::mutex mTone3000InstallMutex;
+  std::optional<std::pair<std::string, std::string>> mTone3000PendingInstall; // {path, format}
 #endif
 };

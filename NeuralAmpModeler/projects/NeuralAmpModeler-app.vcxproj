@@ -424,6 +424,7 @@
          CLAUDE.md's architecture rules ("tone3000-client... never linked
          into the VST3 target"). -->
     <ClCompile Include="..\tone3000-client\Tone3000ApiClient.cpp" />
+    <ClCompile Include="..\tone3000-client\Tone3000Browser.cpp" />
     <ClCompile Include="..\tone3000-client\Tone3000Http.cpp" />
     <ClCompile Include="..\tone3000-client\Tone3000OAuth.cpp" />
     <ClCompile Include="..\tone3000-client\Tone3000Pkce.cpp" />
@@ -431,6 +432,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\tone3000-client\Tone3000ApiClient.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000Browser.h" />
     <ClInclude Include="..\tone3000-client\Tone3000Config.h" />
     <ClInclude Include="..\tone3000-client\Tone3000Http.h" />
     <ClInclude Include="..\tone3000-client\Tone3000OAuth.h" />

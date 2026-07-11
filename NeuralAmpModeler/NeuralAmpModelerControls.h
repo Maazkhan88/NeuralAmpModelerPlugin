@@ -350,7 +350,28 @@ enum class NAMLibraryFilter
   RecentlyUsed,
   MostUsed,
   RecentlyAdded,
-  Groups
+  Groups,
+  Tone3000
+};
+
+// ToneCast: generic (no tone3000-client dependency, see
+// NAMLibraryPanelControl::SetRemoteBrowseHandler) view of one TONE3000
+// search result, for the panel's "TONE3000" tab.
+enum class NAMRemoteItemState
+{
+  NotDownloaded,
+  Downloading,
+  Downloaded,
+  Failed
+};
+
+struct NAMRemoteItem
+{
+  std::string id; // tone id, as a string so this struct stays untyped
+  std::string title;
+  std::string subtitle; // e.g. "amp · nam"
+  bool downloadable = false;
+  NAMRemoteItemState state = NAMRemoteItemState::NotDownloaded;
 };
 
 // ToneCast: shared library-browsing state and helpers, used by both
@@ -377,6 +398,7 @@ inline const char* FilterLabel(NAMLibraryFilter filter)
     case NAMLibraryFilter::MostUsed: return "Most used";
     case NAMLibraryFilter::RecentlyAdded: return "Recently added";
     case NAMLibraryFilter::Groups: return "Groups";
+    case NAMLibraryFilter::Tone3000: return "TONE3000";
   }
   return "All models";
 }
@@ -1086,6 +1108,24 @@ public:
     mConnectStatusText = std::move(statusText);
   }
 
+  // ToneCast: generic hook for the "TONE3000" tab's search/download, same
+  // untyped pattern as SetConnectHandler above -- no tone3000-client
+  // reference in this shared-UI class. `getResults` is polled fresh every
+  // Draw() call rather than pushed via callback, since results live on a
+  // background thread (see tone3000-client/Tone3000Browser.h) and this
+  // control already redraws continuously.
+  void SetRemoteBrowseHandler(std::function<bool()> isSignedIn, std::function<void(const std::string&)> onSearch,
+                              std::function<std::vector<NAMRemoteItem>()> getResults,
+                              std::function<std::string()> statusText,
+                              std::function<void(const std::string&)> onDownloadClick)
+  {
+    mIsSignedIn = std::move(isSignedIn);
+    mOnRemoteSearch = std::move(onSearch);
+    mGetRemoteResults = std::move(getResults);
+    mRemoteStatusText = std::move(statusText);
+    mOnRemoteDownloadClick = std::move(onDownloadClick);
+  }
+
   void OnAttached() override { Recalculate(); }
 
   void Hide(bool hide) override
@@ -1133,41 +1173,116 @@ public:
                  FilterLabel(static_cast<NAMLibraryFilter>(i)), mFilterRects[i].GetPadded(-12.f, 0.f, -6.f, 0.f));
     }
 
+    const bool remoteTab = mActiveFilter == NAMLibraryFilter::Tone3000;
+    if (remoteTab && mGetRemoteResults)
+      mRemoteItemsCache = mGetRemoteResults();
+
     g.FillRoundRect(mStyle.colorSpec.GetColor(kFG), mSearchRect, 4.f);
     g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mSearchRect, 4.f, nullptr, 1.f);
-    const std::string display = mFilter.empty() ? std::string("Search library...") : mFilter;
+    const std::string placeholder = remoteTab ? std::string("Search TONE3000...") : std::string("Search library...");
+    const std::string display = mFilter.empty() ? placeholder : mFilter;
     g.DrawText(mStyle.valueText.WithAlign(EAlign::Near), display.c_str(),
                mSearchRect.GetPadded(-10.f, 0.f, -10.f, 0.f));
 
-    const std::string countStr = std::to_string(mFiltered.size()) + " / " + std::to_string(mAllItems.size());
-    g.DrawText(mStyle.labelText.WithAlign(EAlign::Near).WithSize(11.f), countStr.c_str(), mCountRect);
+    const std::string statusStr = (remoteTab && mRemoteStatusText)
+                                    ? mRemoteStatusText()
+                                    : std::to_string(mFiltered.size()) + " / " + std::to_string(mAllItems.size());
+    g.DrawText(mStyle.labelText.WithAlign(EAlign::Near).WithSize(11.f), statusStr.c_str(), mCountRect);
 
     const IText rowText = mStyle.valueText.WithAlign(EAlign::Near);
     g.PathClipRegion(mListRect);
-    for (size_t i = 0; i < mRowRects.size(); i++)
+    if (remoteTab)
     {
-      const auto& r = mRowRects[i];
-      if (!r.Intersects(mListRect))
-        continue;
-      const bool hovered = mHoveredIdx == static_cast<int>(i);
-      if (hovered)
-        g.FillRoundRect(mStyle.colorSpec.GetColor(kPR), r, 3.f);
+      for (size_t i = 0; i < mRowRects.size() && i < mRemoteItemsCache.size(); i++)
+      {
+        const auto& r = mRowRects[i];
+        if (!r.Intersects(mListRect))
+          continue;
+        const bool hovered = mHoveredIdx == static_cast<int>(i);
+        if (hovered)
+          g.FillRoundRect(mStyle.colorSpec.GetColor(kPR), r, 3.f);
 
-      const auto& item = mFiltered[i];
-      const bool isFavorite = sFavorites.count(item.name) > 0;
-      const IColor starColor = isFavorite ? ToneCastColors::ACCENT : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.45f);
-      DrawFavoriteStar(g, mStarRects[i], isFavorite, starColor);
+        const auto& item = mRemoteItemsCache[i];
 
-      const IColor typeColor = item.isIR ? ToneCastColors::ACCENT.WithOpacity(0.75f) : mStyle.colorSpec.GetColor(kX1);
-      g.DrawText(rowText.WithSize(10.f).WithFGColor(typeColor), item.isIR ? "IR" : "AMP", mTypeRects[i]);
+        IColor dotColor = mStyle.colorSpec.GetColor(kX1).WithOpacity(item.downloadable ? 0.4f : 0.15f);
+        if (item.state == NAMRemoteItemState::Downloading)
+          dotColor = ToneCastColors::ACCENT;
+        else if (item.state == NAMRemoteItemState::Downloaded)
+          dotColor = IColor(255, 90, 200, 110);
+        else if (item.state == NAMRemoteItemState::Failed)
+          dotColor = IColor(255, 210, 80, 80);
+        g.FillCircle(dotColor, mStarRects[i].MW(), mStarRects[i].MH(), 4.f);
 
-      const IRECT textRect =
-        r.GetReducedFromLeft(mStarRects[i].W() + mTypeRects[i].W() + 8.f).GetPadded(-4.f, 0.f, -6.f, 0.f);
-      g.DrawText(rowText, TruncateToFit(g, rowText, item.name, textRect.W()).c_str(), textRect);
+        const IColor badgeColor = item.downloadable ? ToneCastColors::ACCENT.WithOpacity(0.75f)
+                                                     : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.5f);
+        g.DrawText(rowText.WithSize(10.f).WithFGColor(badgeColor), item.subtitle.c_str(), mTypeRects[i]);
+
+        const IRECT actionRect = r.GetFromRight(70.f).GetPadded(-4.f, 0.f, -4.f, 0.f);
+        const IRECT titleRect = r.GetReducedFromLeft(mStarRects[i].W() + mTypeRects[i].W() + 8.f)
+                                  .GetReducedFromRight(70.f)
+                                  .GetPadded(-4.f, 0.f, -2.f, 0.f);
+        g.DrawText(rowText, TruncateToFit(g, rowText, item.title, titleRect.W()).c_str(), titleRect);
+
+        const char* actionLabel = "Download";
+        IColor actionColor = ToneCastColors::ACCENT;
+        if (item.state == NAMRemoteItemState::Downloading)
+        {
+          actionLabel = "...";
+          actionColor = mStyle.colorSpec.GetColor(kX1);
+        }
+        else if (item.state == NAMRemoteItemState::Downloaded)
+        {
+          actionLabel = "Installed";
+          actionColor = IColor(255, 90, 200, 110);
+        }
+        else if (item.state == NAMRemoteItemState::Failed)
+        {
+          actionLabel = "Retry";
+          actionColor = IColor(255, 210, 80, 80);
+        }
+        else if (!item.downloadable)
+        {
+          actionLabel = "N/A";
+          actionColor = mStyle.colorSpec.GetColor(kX1).WithOpacity(0.4f);
+        }
+        g.DrawText(rowText.WithSize(10.f).WithFGColor(actionColor).WithAlign(EAlign::Far), actionLabel, actionRect);
+      }
+    }
+    else
+    {
+      for (size_t i = 0; i < mRowRects.size(); i++)
+      {
+        const auto& r = mRowRects[i];
+        if (!r.Intersects(mListRect))
+          continue;
+        const bool hovered = mHoveredIdx == static_cast<int>(i);
+        if (hovered)
+          g.FillRoundRect(mStyle.colorSpec.GetColor(kPR), r, 3.f);
+
+        const auto& item = mFiltered[i];
+        const bool isFavorite = sFavorites.count(item.name) > 0;
+        const IColor starColor =
+          isFavorite ? ToneCastColors::ACCENT : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.45f);
+        DrawFavoriteStar(g, mStarRects[i], isFavorite, starColor);
+
+        const IColor typeColor = item.isIR ? ToneCastColors::ACCENT.WithOpacity(0.75f) : mStyle.colorSpec.GetColor(kX1);
+        g.DrawText(rowText.WithSize(10.f).WithFGColor(typeColor), item.isIR ? "IR" : "AMP", mTypeRects[i]);
+
+        const IRECT textRect =
+          r.GetReducedFromLeft(mStarRects[i].W() + mTypeRects[i].W() + 8.f).GetPadded(-4.f, 0.f, -6.f, 0.f);
+        g.DrawText(rowText, TruncateToFit(g, rowText, item.name, textRect.W()).c_str(), textRect);
+      }
     }
     g.PathClipRegion();
 
-    if (mFiltered.empty())
+    if (remoteTab)
+    {
+      if (!mIsSignedIn || !mIsSignedIn())
+        g.DrawText(mStyle.labelText, "Connect TONE3000 above to browse", mListRect);
+      else if (mRemoteItemsCache.empty())
+        g.DrawText(mStyle.labelText, mFilter.empty() ? "Type a search and press Enter" : "No results", mListRect);
+    }
+    else if (mFiltered.empty())
     {
       const char* msg = mAllItems.empty() ? "No models or IRs loaded yet" : "No matches";
       g.DrawText(mStyle.labelText, msg, mListRect);
@@ -1203,6 +1318,21 @@ public:
     if (mSearchRect.Contains(x, y))
     {
       OpenSearchBox();
+      return;
+    }
+
+    if (mActiveFilter == NAMLibraryFilter::Tone3000)
+    {
+      const int idx = HitTestRow(x, y);
+      if (idx >= 0 && static_cast<size_t>(idx) < mRemoteItemsCache.size())
+      {
+        const auto& item = mRemoteItemsCache[idx];
+        if (item.downloadable
+            && (item.state == NAMRemoteItemState::NotDownloaded || item.state == NAMRemoteItemState::Failed)
+            && mOnRemoteDownloadClick)
+          mOnRemoteDownloadClick(item.id);
+        SetDirty(false);
+      }
       return;
     }
 
@@ -1253,7 +1383,15 @@ public:
   void OnTextEntryCompletion(const char* str, int valIdx) override
   {
     mFilter = str ? str : "";
-    ApplyFilter();
+    if (mActiveFilter == NAMLibraryFilter::Tone3000)
+    {
+      if (mOnRemoteSearch)
+        mOnRemoteSearch(mFilter);
+    }
+    else
+    {
+      ApplyFilter();
+    }
     SetDirty(false);
   }
 
@@ -1378,7 +1516,7 @@ private:
 
     mFilterRects.clear();
     float filterTop = belowConnect;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
     {
       mFilterRects.emplace_back(mSidebarRect.L + 8.f, filterTop, mSidebarRect.R - 8.f, filterTop + 30.f);
       filterTop += 33.f;
@@ -1396,7 +1534,7 @@ private:
     mRowRects.clear();
     mStarRects.clear();
     mTypeRects.clear();
-    for (size_t i = 0; i < mFiltered.size(); i++)
+    for (size_t i = 0; i < ActiveItemCount(); i++)
     {
       const float top = mListRect.T + static_cast<float>(i) * mRowHeight - mScrollOffset;
       const IRECT row(mListRect.L, top, mListRect.R, top + rowH);
@@ -1406,9 +1544,14 @@ private:
     }
   }
 
+  size_t ActiveItemCount() const
+  {
+    return mActiveFilter == NAMLibraryFilter::Tone3000 ? mRemoteItemsCache.size() : mFiltered.size();
+  }
+
   void ClampScroll()
   {
-    const float contentHeight = static_cast<float>(mFiltered.size()) * mRowHeight;
+    const float contentHeight = static_cast<float>(ActiveItemCount()) * mRowHeight;
     const float maxScroll = std::max(0.f, contentHeight - mListRect.H());
     mScrollOffset = Clip(mScrollOffset, 0.f, maxScroll);
   }
@@ -1423,6 +1566,12 @@ private:
   IRECT mSidebarRect, mTitleRect, mCloseRect, mConnectRect, mSearchRect, mCountRect, mListRect;
   std::function<void()> mOnConnectClick;
   std::function<std::string()> mConnectStatusText;
+  std::function<bool()> mIsSignedIn;
+  std::function<void(const std::string&)> mOnRemoteSearch;
+  std::function<std::vector<NAMRemoteItem>()> mGetRemoteResults;
+  std::function<std::string()> mRemoteStatusText;
+  std::function<void(const std::string&)> mOnRemoteDownloadClick;
+  std::vector<NAMRemoteItem> mRemoteItemsCache;
   float mScrollOffset = 0.f;
   float mRowHeight = 34.f;
   int mHoveredIdx = -1;
