@@ -351,6 +351,7 @@
     <ClInclude Include="..\..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.h" />
     <ClInclude Include="..\resources\resource.h" />
     <ClInclude Include="..\ToneStack.h" />
+    <ClInclude Include="..\NAMUserSettings.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\iPlug2\Dependencies\IPlug\RTAudio\include\asio.cpp" />
@@ -418,6 +419,7 @@
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\slimmable.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
+    <ClCompile Include="..\NAMUserSettings.cpp" />
     <!-- ToneCast: tone3000-client/ is standalone-only (networking + OAuth).
          These files must be added ONLY here, never to
          NeuralAmpModeler-vst3.vcxproj. See docs/decisions-log.md and

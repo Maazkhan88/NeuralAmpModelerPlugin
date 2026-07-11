@@ -9,6 +9,7 @@
 #include "../NeuralAmpModelerCore/NAM/slimmable.h"
 
 #include "Colors.h"
+#include "NAMUserSettings.h"
 #include "ToneStack.h"
 
 #include "IPlug_include_in_plug_hdr.h"

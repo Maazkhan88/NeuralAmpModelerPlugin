@@ -194,23 +194,34 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto eqToggleArea = IRECT(midKnobArea.L + 8.f, 360.f, midKnobArea.R - 8.f, 414.f);
 
     // File controls sit precisely inside the two generated rack slots.
-    // ToneCast: raised ~45px — the previous Y left a wide empty gap between
-    // the brass control plate's bottom edge and these rows, reading as
-    // "way below" the rest of the panel.
-    const auto modelArea = IRECT(94.f, 473.f, 810.f, 520.f);
-    const auto irArea = IRECT(94.f, 533.f, 810.f, 580.f);
-    const auto modelIconArea = IRECT(58.f, 478.f, 88.f, 515.f);
-    const auto irSwitchArea = IRECT(58.f, 538.f, 88.f, 575.f);
-    const auto slimIconArea = IRECT(765.f, 480.f, 805.f, 513.f);
+    // ToneCast: these two previous rounds of "raise/lower by feel" both
+    // missed — this pass instead measured the actual baked-in rack-slot
+    // outlines in ToneCastChassisV2.png directly (pixel-scanned the PNG:
+    // slot 1 outline at image y=[815,892], slot 2 at y=[908,986], both
+    // spanning image x=[87,1381], image size 1474x1067) and converted
+    // through the same independent X/Y scale IGraphics::DrawFittedBitmap
+    // uses (canvasW/bitmapW, canvasH/bitmapH) to get canvas coordinates.
+    // The X extents are left as before (94-810, narrower than the full
+    // slot) since that wasn't what was reported as broken.
+    const auto modelArea = IRECT(94.f, 496.f, 810.f, 543.f);
+    const auto irArea = IRECT(94.f, 553.f, 810.f, 600.f);
+    const auto modelIconArea = IRECT(58.f, 501.f, 88.f, 538.f);
+    const auto irSwitchArea = IRECT(58.f, 558.f, 88.f, 595.f);
+    const auto slimIconArea = IRECT(765.f, 503.f, 805.f, 536.f);
 
     // Slim vertical meters frame the hardware controls without covering the
     // four decorative brass screws baked into the chassis artwork.
-    // ToneCast: input meter's left edge nudged in from 83 to 98 — it was
-    // overhanging the panel's left inner edge.
-    const auto inputMeterArea = IRECT(98.f, 236.f, 202.f, 306.f);
-    const auto outputMeterArea = IRECT(707.f, 236.f, 811.f, 306.f);
-    const auto inputMeterLabelArea = IRECT(100.f, 311.f, 200.f, 337.f);
-    const auto outputMeterLabelArea = IRECT(709.f, 311.f, 809.f, 337.f);
+    // ToneCast: same pixel-measurement approach as the rack slots above —
+    // the previous "nudge input from 83 to 98" was a guess that overshot
+    // past the real cutout (measured at image x=[140,321] for the left
+    // cutout, y=[351,512] for both cutouts; the input meter has been too
+    // far right ever since). Converted the same way; sized to stay
+    // centered inside each cutout rather than matching its full size, to
+    // avoid stretching the meter bitmap's needle-dial art.
+    const auto inputMeterArea = IRECT(89.f, 228.f, 193.f, 298.f);
+    const auto outputMeterArea = IRECT(707.f, 228.f, 811.f, 298.f);
+    const auto inputMeterLabelArea = IRECT(91.f, 303.f, 191.f, 329.f);
+    const auto outputMeterLabelArea = IRECT(709.f, 303.f, 809.f, 329.f);
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
@@ -312,6 +323,33 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl),
       kCtrlTagIRFileBrowser);
+
+#ifdef APP_API
+    // ToneCast: restore the last-used NAM/IR folder + file on launch.
+    // Standalone-only -- a VST3 instance gets its model/IR from the DAW
+    // project's own saved state (UnserializeState), which may already
+    // have run by the time this layout code executes; unconditionally
+    // restaging from this global "last used anywhere" file would clobber
+    // that project-specific choice. The standalone app has no such
+    // per-session state, so every launch would otherwise start blank
+    // (see NAMUserSettings.h).
+    {
+      const NAMUserSettings userSettings = LoadNAMUserSettings();
+      auto* modelBrowserCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>();
+      auto* irBrowserCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>();
+      if (!userSettings.modelDir.empty())
+        modelBrowserCtrl->ScanDirectory(userSettings.modelDir.c_str());
+      if (!userSettings.irDir.empty())
+        irBrowserCtrl->ScanDirectory(userSettings.irDir.c_str());
+      // Staged directly (not via the completion handlers) so a file that
+      // was since moved or deleted fails silently instead of popping an
+      // error dialog on every launch.
+      if (!userSettings.modelPath.empty())
+        _StageModel(WDL_String(userSettings.modelPath.c_str()));
+      if (!userSettings.irPath.empty())
+        _StageIR(WDL_String(userSettings.irPath.c_str()));
+    }
+#endif
     // ToneCast (Task 3.1): stock vector-drawn IVControls, no bitmap
     // textures. Style tweaks below mirror what NAMSwitchControl /
     // NAMKnobControl / NAMMeterControl used to add on top of these same
@@ -947,6 +985,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     mStagedModel = std::move(temp);
     mNAMPath = modelPath;
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+    UpdateNAMModelSettings(mNAMPath.Get());
   }
   catch (std::runtime_error& e)
   {
@@ -988,6 +1027,7 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   {
     mIRPath = irPath;
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
+    UpdateNAMIRSettings(mIRPath.Get());
   }
   else
   {

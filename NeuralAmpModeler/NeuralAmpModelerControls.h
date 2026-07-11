@@ -996,6 +996,22 @@ public:
     LoadFileAtCurrentIndex();
   }
 
+  // ToneCast: populates this browser's item list from `dir` without the
+  // user having to browse for it interactively -- used to restore the
+  // last-used folder on startup (see NAMUserSettings.h and the
+  // #ifdef APP_API block in NeuralAmpModeler.cpp's layout function).
+  // Deliberately doesn't call LoadFileAtCurrentIndex() -- the caller
+  // stages the remembered file directly (see that same block) so a
+  // missing/moved file fails silently instead of popping an error
+  // dialog on every launch.
+  void ScanDirectory(const char* dir)
+  {
+    ClearPathList();
+    AddPath(dir, "");
+    SetupMenu();
+    SelectFirstFile();
+  }
+
   void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
   {
     switch (msgTag)
