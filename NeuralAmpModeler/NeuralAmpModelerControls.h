@@ -1866,14 +1866,23 @@ public:
     const IVStyle leftStyle = style.WithValueText(leftText);
 
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
-    // ToneCast: this page's layout predates the persistent header bar
-    // (hamburger/logo/"TONECAST"/gear, always attached in the main layout
-    // at y=[~20,79] and never hidden while this overlay is open) -- the
-    // original y=[30,80] title landed in the exact same band, rendering
-    // "SETTINGS" directly on top of "TONECAST". Shifted down clear of it;
-    // everything below (calibration knobs, Output Mode radio group) is
-    // positioned relative to titleArea, so it shifts down with it.
-    const auto titleArea = GetRECT().GetPadded(-(pad + 10.0f)).GetFromTop(50.0f).GetTranslated(0.f, 65.f);
+    // ToneCast: everything below was laid out relative to GetRECT() (the
+    // full 900x650 canvas), on the assumption that mBitmap fills it. It
+    // doesn't -- IBitmapControl's Draw() calls IBitmapBase::DrawBitmap(),
+    // which draws the bitmap at its NATIVE size, centered in GetRECT()
+    // (see IBitmapBase::DrawBitmap in IControl.h: "GetCentredInside(IRECT
+    // (0, 0, mBitmap))"), not stretched to fill it the way
+    // DrawFittedBitmap does elsewhere in this codebase. Background.jpg is
+    // 600x400 -- in the 900x650 canvas that's a card with ~150px of
+    // margin on each side and ~125px top/bottom, not the full window.
+    // Everything positioned relative to GetRECT() (the old titleArea, the
+    // input/output calibration block, Output Mode, the bottom info
+    // panels) was floating above/beside/past the actual visible card
+    // instead of inside it. cardRect below reproduces the exact same
+    // centering DrawBitmap uses, so it always matches wherever the
+    // bitmap actually renders.
+    const IRECT cardRect = GetRECT().GetCentredInside(IRECT(0, 0, mBitmap));
+    const auto titleArea = cardRect.GetPadded(-(pad + 10.0f)).GetFromTop(50.0f);
     AddNamedChildControl(new IVLabelControl(titleArea, "SETTINGS", titleStyle), mControlNames.title);
 
     // Attach input/output calibration controls
@@ -1911,8 +1920,11 @@ public:
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
     }
 
-    const float halfWidth = PLUG_WIDTH / 2.0f - pad;
-    const auto bottomArea = GetRECT().GetPadded(-pad).GetFromBottom(78.0f);
+    // ToneCast: was PLUG_WIDTH/2 (full-canvas half-width, 430px) and
+    // GetRECT() -- see the cardRect comment above. Both overflowed past
+    // the card's actual right/bottom edges into the main view behind it.
+    const float halfWidth = cardRect.W() / 2.0f - pad;
+    const auto bottomArea = cardRect.GetPadded(-pad).GetFromBottom(78.0f);
     const float lineHeight = 15.0f;
     const auto modelInfoArea = bottomArea.GetFromLeft(halfWidth).GetFromTop(4 * lineHeight);
     const auto aboutArea = bottomArea.GetFromRight(halfWidth).GetFromTop(5 * lineHeight);
