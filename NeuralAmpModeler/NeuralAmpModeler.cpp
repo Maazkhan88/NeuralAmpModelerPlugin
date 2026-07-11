@@ -141,50 +141,40 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // via the gear icon) hasn't been reskinned yet in this pass — see
     // docs/decisions-log.md and tonecast-windows-dev-plan.md Task 3.1.
     const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
+    const auto toneCastChassisBitmap = pGraphics->LoadBitmap(TONECAST_CHASSIS_FN);
+    const auto toneCastKnobBitmap = pGraphics->LoadBitmap(TONECAST_KNOB_FN);
     const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
     const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
 
     const auto b = pGraphics->GetBounds();
-    const auto mainArea = b.GetPadded(-20);
-    const auto contentArea = mainArea.GetPadded(-10);
-    const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight);
+    // The generated chassis is composed to the same logical 900x650 canvas:
+    // leather header, brushed-brass control plate, and two lower rack slots.
+    const auto titleArea = IRECT(120.f, 24.f, 780.f, 80.f);
+    const auto subtitleArea = IRECT(120.f, 67.f, 780.f, 94.f);
 
-    // Areas for knobs
-    const auto knobsPad = 20.0f;
-    const auto knobsExtraSpaceBelowTitle = 25.0f;
-    const auto singleKnobPad = -2.0f;
-    const auto knobsArea = contentArea.GetFromTop(NAM_KNOB_HEIGHT)
-                             .GetReducedFromLeft(knobsPad)
-                             .GetReducedFromRight(knobsPad)
-                             .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
+    const auto knobsArea = IRECT(96.f, 145.f, 804.f, 305.f);
+    const auto inputKnobArea = knobsArea.GetGridCell(0, 0, 1, numKnobs).GetPadded(-4.f);
+    const auto noiseGateArea = knobsArea.GetGridCell(0, 1, 1, numKnobs).GetPadded(-4.f);
+    const auto bassKnobArea = knobsArea.GetGridCell(0, 2, 1, numKnobs).GetPadded(-4.f);
+    const auto midKnobArea = knobsArea.GetGridCell(0, 3, 1, numKnobs).GetPadded(-4.f);
+    const auto trebleKnobArea = knobsArea.GetGridCell(0, 4, 1, numKnobs).GetPadded(-4.f);
+    const auto outputKnobArea = knobsArea.GetGridCell(0, 5, 1, numKnobs).GetPadded(-4.f);
 
-    const auto ngToggleArea =
-      noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto ngToggleArea = IRECT(noiseGateArea.L + 12.f, 330.f, noiseGateArea.R - 12.f, 390.f);
+    const auto eqToggleArea = IRECT(midKnobArea.L + 12.f, 330.f, midKnobArea.R - 12.f, 390.f);
 
-    // Areas for model and IR
-    const auto fileWidth = 200.0f;
-    const auto fileHeight = 30.0f;
-    const auto irYOffset = 38.0f;
-    const auto modelArea =
-      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
-    const auto slimIconArea =
-      IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
-    const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+    // File controls sit precisely inside the two generated rack slots.
+    const auto modelArea = IRECT(88.f, 490.f, 812.f, 545.f);
+    const auto irArea = IRECT(88.f, 554.f, 812.f, 609.f);
+    const auto modelIconArea = IRECT(58.f, 501.f, 80.f, 533.f);
+    const auto irSwitchArea = IRECT(57.f, 565.f, 81.f, 597.f);
+    const auto slimIconArea = IRECT(817.f, 503.f, 865.f, 533.f);
 
-    // Areas for meters
-    const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
-    const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
+    // Slim vertical meters frame the hardware controls without covering the
+    // four decorative brass screws baked into the chassis artwork.
+    const auto inputMeterArea = IRECT(61.f, 166.f, 78.f, 390.f);
+    const auto outputMeterArea = IRECT(822.f, 166.f, 839.f, 390.f);
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
@@ -223,8 +213,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     };
 
-    pGraphics->AttachControl(new IPanelControl(b, ToneCastColors::BACKGROUND));
+    const IColor hardwareInk(255, 40, 30, 19);
+    const auto hardwareStyle = style.WithLabelText(IText(DEFAULT_TEXT_SIZE + 3.f, hardwareInk, "Roboto-Regular"))
+                                 .WithValueText(IText(DEFAULT_TEXT_SIZE + 2.f, hardwareInk, "Roboto-Regular"))
+                                 .WithColor(kX1, hardwareInk)
+                                 .WithColor(kX3, ToneCastColors::ACCENT);
+    const auto subtitleStyle = DEFAULT_STYLE
+                                 .WithValueText(IText(10.f, ToneCastColors::FG_TEXT_MUTED, "Roboto-Regular"))
+                                 .WithDrawFrame(false);
+
+    pGraphics->AttachControl(new NAMFittedBitmapControl(b, toneCastChassisBitmap));
     pGraphics->AttachControl(new IVLabelControl(titleArea, "TONECAST", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(subtitleArea, "NEURAL AMP PLAYER", subtitleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -275,7 +275,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // textures. Style tweaks below mirror what NAMSwitchControl /
     // NAMKnobControl / NAMMeterControl used to add on top of these same
     // base classes, minus the bitmap overlay.
-    const auto switchStyle = style.WithRoundness(0.666f)
+    const auto switchStyle = hardwareStyle.WithRoundness(0.666f)
                                 .WithShowValue(false)
                                 .WithEmboss(true)
                                 .WithShadowOffset(1.5f)
@@ -288,12 +288,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new IVSlideSwitchControl(eqToggleArea, kEQActive, "EQ", switchStyle));
 
     // The knobs
-    pGraphics->AttachControl(new IVKnobControl(inputKnobArea, kInputLevel, "", style, true));
-    pGraphics->AttachControl(new IVKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, true));
-    pGraphics->AttachControl(new IVKnobControl(bassKnobArea, kToneBass, "", style, true), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new IVKnobControl(midKnobArea, kToneMid, "", style, true), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new IVKnobControl(trebleKnobArea, kToneTreble, "", style, true), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new IVKnobControl(outputKnobArea, kOutputLevel, "", style, true));
+    pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", hardwareStyle, toneCastKnobBitmap));
+    pGraphics->AttachControl(
+      new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", hardwareStyle, toneCastKnobBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(bassKnobArea, kToneBass, "", hardwareStyle, toneCastKnobBitmap), -1,
+                             "EQ_KNOBS");
+    pGraphics->AttachControl(new NAMKnobControl(midKnobArea, kToneMid, "", hardwareStyle, toneCastKnobBitmap), -1,
+                             "EQ_KNOBS");
+    pGraphics->AttachControl(new NAMKnobControl(trebleKnobArea, kToneTreble, "", hardwareStyle, toneCastKnobBitmap),
+                             -1, "EQ_KNOBS");
+    pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", hardwareStyle, toneCastKnobBitmap));
 
     // The meters
     constexpr float kMeterMin = -70.0f;

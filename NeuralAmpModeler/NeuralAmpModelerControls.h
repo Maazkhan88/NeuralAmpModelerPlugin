@@ -95,6 +95,20 @@ private:
   IActionFunction mDismiss;
 };
 
+class NAMFittedBitmapControl : public IControl, public IBitmapBase
+{
+public:
+  NAMFittedBitmapControl(const IRECT& bounds, IBitmap bitmap)
+  : IControl(bounds)
+  , IBitmapBase(bitmap)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+  void Draw(IGraphics& g) override { g.DrawFittedBitmap(mBitmap, mRECT); }
+};
+
 class NAMKnobControl : public IVKnobControl, public IBitmapBase
 {
 public:
@@ -116,7 +130,9 @@ public:
     DrawIndicatorTrack(g, angle, cx + 0.5, cy, widgetRadius);
     g.DrawFittedBitmap(mBitmap, knobRect);
     float data[2][2];
-    RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
+    RadialPoints(angle, cx, cy, 0.12f * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
+    g.DrawLine(GetColor(mMouseIsOver ? kX3 : kX1), data[0][0], data[0][1], data[1][0], data[1][1], &mBlend,
+               3.f);
     g.PathCircle(data[1][0], data[1][1], 3);
     g.PathFill(IPattern::CreateRadialGradient(data[1][0], data[1][1], 4.0f,
                                               {{GetColor(mMouseIsOver ? kX3 : kX1), 0.f},
