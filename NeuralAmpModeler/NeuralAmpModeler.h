@@ -65,6 +65,7 @@ enum ECtrlTags
   kCtrlTagSlimmableIcon,
   kCtrlTagSlimOverlayBackdrop,
   kCtrlTagSlimKnob,
+  kCtrlTagLibraryPanel,
   kNumCtrlTags
 };
 

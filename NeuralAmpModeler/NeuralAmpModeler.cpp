@@ -155,7 +155,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto logoArea = IRECT(316.f, 36.f, 356.f, 78.f);
     const auto titleArea = IRECT(358.f, 35.f, 590.f, 79.f);
 
-    const auto knobsArea = IRECT(190.f, 174.f, 710.f, 355.f);
+    // ToneCast: root cause of the label/knob gap was that NAMKnobControl
+    // draws a widgetBounds.W() x widgetBounds.W() SQUARE (see
+    // NeuralAmpModelerControls.h, NAMKnobControl::DrawWidget), vertically
+    // centered inside whatever widgetBounds height it's given.
+    // DEFAULT_WIDGET_FRAC is already 1.0 (maxed), so the only way to
+    // remove that centering slack is to shrink the cell's height down
+    // toward its width (~87px at 6 knobs across a 520px-wide area) —
+    // first attempt (174->200 top) wasn't enough. Bottom stays at 355 to
+    // preserve alignment with the knob-well shadows baked into the
+    // chassis art.
+    const auto knobsArea = IRECT(190.f, 240.f, 710.f, 355.f);
     const auto inputKnobArea = knobsArea.GetGridCell(0, 0, 1, numKnobs).GetPadded(-4.f);
     const auto noiseGateArea = knobsArea.GetGridCell(0, 1, 1, numKnobs).GetPadded(-4.f);
     const auto bassKnobArea = knobsArea.GetGridCell(0, 2, 1, numKnobs).GetPadded(-4.f);
@@ -167,17 +177,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto eqToggleArea = IRECT(midKnobArea.L + 8.f, 360.f, midKnobArea.R - 8.f, 414.f);
 
     // File controls sit precisely inside the two generated rack slots.
-    const auto modelArea = IRECT(94.f, 518.f, 810.f, 565.f);
-    const auto irArea = IRECT(94.f, 578.f, 810.f, 625.f);
-    const auto modelIconArea = IRECT(58.f, 523.f, 88.f, 560.f);
-    const auto irSwitchArea = IRECT(58.f, 583.f, 88.f, 620.f);
-    const auto slimIconArea = IRECT(765.f, 525.f, 805.f, 558.f);
+    // ToneCast: raised ~45px — the previous Y left a wide empty gap between
+    // the brass control plate's bottom edge and these rows, reading as
+    // "way below" the rest of the panel.
+    const auto modelArea = IRECT(94.f, 473.f, 810.f, 520.f);
+    const auto irArea = IRECT(94.f, 533.f, 810.f, 580.f);
+    const auto modelIconArea = IRECT(58.f, 478.f, 88.f, 515.f);
+    const auto irSwitchArea = IRECT(58.f, 538.f, 88.f, 575.f);
+    const auto slimIconArea = IRECT(765.f, 480.f, 805.f, 513.f);
 
     // Slim vertical meters frame the hardware controls without covering the
     // four decorative brass screws baked into the chassis artwork.
-    const auto inputMeterArea = IRECT(83.f, 236.f, 187.f, 306.f);
+    // ToneCast: input meter's left edge nudged in from 83 to 98 — it was
+    // overhanging the panel's left inner edge.
+    const auto inputMeterArea = IRECT(98.f, 236.f, 202.f, 306.f);
     const auto outputMeterArea = IRECT(707.f, 236.f, 811.f, 306.f);
-    const auto inputMeterLabelArea = IRECT(85.f, 311.f, 185.f, 337.f);
+    const auto inputMeterLabelArea = IRECT(100.f, 311.f, 200.f, 337.f);
     const auto outputMeterLabelArea = IRECT(709.f, 311.f, 809.f, 337.f);
 
     // Misc Areas
@@ -334,6 +349,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                  crossSVG, style, radioButtonStyle),
                       kCtrlTagSettingsBox)
       ->Hide(true);
+
+    // ToneCast (Task 3.1): library panel toggle, mirrors the settings gear's
+    // corner position on the opposite (top-left) side. Docked drawer, hidden
+    // by default per the user's requested toggle-not-always-visible behavior.
+    const auto libraryToggleArea =
+      b.GetPadded(-20).GetFromTLHC(50.f, 50.f).GetCentredInside(20.f, 20.f);
+    const auto libraryPanelArea = IRECT(0.f, 90.f, 300.f, b.B);
+    pGraphics->AttachControl(new NAMLibraryToggleButtonControl(libraryToggleArea, [pGraphics](IControl* pCaller) {
+      auto* panel = pGraphics->GetControlWithTag(kCtrlTagLibraryPanel);
+      panel->Hide(!panel->IsHidden());
+    }));
+    pGraphics
+      ->AttachControl(new NAMLibraryPanelControl(libraryPanelArea, style), kCtrlTagLibraryPanel)
+      ->Hide(true);
+    static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
+      ->SetBrowsers(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>(),
+                    pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>());
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
     pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
