@@ -325,7 +325,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       kCtrlTagIRFileBrowser);
 
 #ifdef APP_API
-    // ToneCast: restore the last-used NAM/IR folder + file on launch.
+    // ToneCast: rebuild the standalone browser from the one durable library
+    // shared by local imports and TONE3000 downloads. A saved external path
+    // from an older build is imported once before it is staged.
     // Standalone-only -- a VST3 instance gets its model/IR from the DAW
     // project's own saved state (UnserializeState), which may already
     // have run by the time this layout code executes; unconditionally
@@ -334,13 +336,25 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // per-session state, so every launch would otherwise start blank
     // (see NAMUserSettings.h).
     {
+      InitializeNAMLibrary();
       const NAMUserSettings userSettings = LoadNAMUserSettings();
+      // One-time forward migration from the external folders remembered by
+      // Claude's earlier persistence patch. Import every sibling shown by the
+      // old browser, not just the last selected file.
+      if (!userSettings.modelDir.empty())
+        ImportNAMDirectoryToLibrary(userSettings.modelDir, NAMLibraryFileKind::Model);
+      if (!userSettings.irDir.empty())
+        ImportNAMDirectoryToLibrary(userSettings.irDir, NAMLibraryFileKind::IR);
       auto* modelBrowserCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>();
       auto* irBrowserCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>();
-      if (!userSettings.modelDir.empty())
-        modelBrowserCtrl->ScanDirectory(userSettings.modelDir.c_str());
-      if (!userSettings.irDir.empty())
-        irBrowserCtrl->ScanDirectory(userSettings.irDir.c_str());
+      const auto modelDirU8 = GetNAMLibraryDirectory(NAMLibraryFileKind::Model).u8string();
+      const auto irDirU8 = GetNAMLibraryDirectory(NAMLibraryFileKind::IR).u8string();
+      const std::string modelDir(modelDirU8.begin(), modelDirU8.end());
+      const std::string irDir(irDirU8.begin(), irDirU8.end());
+      if (!modelDir.empty())
+        modelBrowserCtrl->ScanDirectory(modelDir.c_str());
+      if (!irDir.empty())
+        irBrowserCtrl->ScanDirectory(irDir.c_str());
       // Staged directly (not via the completion handlers) so a file that
       // was since moved or deleted fails silently instead of popping an
       // error dialog on every launch.
@@ -983,7 +997,17 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       slimmable->SetSlimmableSize(GetParam(kSlim)->Value());
     }
     mStagedModel = std::move(temp);
-    mNAMPath = modelPath;
+    try
+    {
+      const auto sourceDir = std::filesystem::u8path(modelPath.Get()).parent_path().u8string();
+      ImportNAMDirectoryToLibrary(std::string(sourceDir.begin(), sourceDir.end()), NAMLibraryFileKind::Model);
+    }
+    catch (const std::exception&)
+    {
+      // The selected file is still installed below; sibling import is best-effort.
+    }
+    const std::string installedPath = InstallNAMFileInLibrary(modelPath.Get(), NAMLibraryFileKind::Model);
+    mNAMPath.Set(installedPath.empty() ? modelPath.Get() : installedPath.c_str());
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
     UpdateNAMModelSettings(mNAMPath.Get());
   }
@@ -1025,7 +1049,17 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
   {
-    mIRPath = irPath;
+    try
+    {
+      const auto sourceDir = std::filesystem::u8path(irPath.Get()).parent_path().u8string();
+      ImportNAMDirectoryToLibrary(std::string(sourceDir.begin(), sourceDir.end()), NAMLibraryFileKind::IR);
+    }
+    catch (const std::exception&)
+    {
+      // The selected file is still installed below; sibling import is best-effort.
+    }
+    const std::string installedPath = InstallNAMFileInLibrary(irPath.Get(), NAMLibraryFileKind::IR);
+    mIRPath.Set(installedPath.empty() ? irPath.Get() : installedPath.c_str());
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
     UpdateNAMIRSettings(mIRPath.Get());
   }

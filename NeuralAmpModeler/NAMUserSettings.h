@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <filesystem>
 #include <string>
 
 // ToneCast: remembers the last-used NAM/IR file and its containing
@@ -28,3 +30,28 @@ void SaveNAMUserSettings(const NAMUserSettings& settings);
 // load/mutate/save sequence (and risk clobbering the other fields).
 void UpdateNAMModelSettings(const std::string& modelPath);
 void UpdateNAMIRSettings(const std::string& irPath);
+
+// ToneCast's single durable user library. Both local imports and TONE3000
+// downloads are installed below %LOCALAPPDATA%\ToneCast\Library so the
+// standalone app can reconstruct its complete library after a restart.
+enum class NAMLibraryFileKind
+{
+  Model,
+  IR,
+  Preset
+};
+
+std::filesystem::path GetNAMLibraryRoot();
+std::filesystem::path GetNAMLibraryDirectory(NAMLibraryFileKind kind);
+bool InitializeNAMLibrary();
+
+// Copies an existing file into the matching library directory. Returns the
+// canonical library path as UTF-8, or an empty string if installation fails.
+// Re-importing identical content reuses the existing file; a different file
+// with the same name receives a numeric suffix instead of being overwritten.
+std::string InstallNAMFileInLibrary(const std::string& sourcePath, NAMLibraryFileKind kind);
+
+// Imports all supported files in one directory (non-recursive, matching the
+// existing file browser). This preserves the complete local library shown
+// beside a selected file, rather than remembering only that one file.
+size_t ImportNAMDirectoryToLibrary(const std::string& sourceDirectory, NAMLibraryFileKind kind);

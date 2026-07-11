@@ -1,6 +1,7 @@
 #include "Tone3000Browser.h"
 #include "Tone3000ApiClient.h"
 #include "Tone3000Http.h"
+#include "../NAMUserSettings.h"
 
 #include <algorithm>
 #include <fstream>
@@ -34,26 +35,16 @@ std::string SanitizeForFilename(const std::string& s)
   return out;
 }
 
-// %LOCALAPPDATA%\ToneCast\tone3000-cache\ -- created on first use.
-// Downloaded files live here indefinitely (no eviction yet; that's the
-// deferred file-cache/ module mentioned in docs/decisions-log.md).
-std::wstring GetCacheDir()
+// TONE3000 installs into the same durable library used by local imports.
+// Models and IRs therefore survive restarts and appear in the same browser.
+std::filesystem::path GetInstallDir(const std::string& format)
 {
-  wchar_t* localAppData = nullptr;
-  if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData)) || !localAppData)
-    return L"";
-  std::wstring dir(localAppData);
-  CoTaskMemFree(localAppData);
-  dir += L"\\ToneCast\\tone3000-cache\\";
-
-  // Create each path segment; ignore ERROR_ALREADY_EXISTS.
-  std::wstring partial;
-  for (size_t i = 0; i < dir.size(); i++)
-  {
-    partial += dir[i];
-    if (dir[i] == L'\\')
-      CreateDirectoryW(partial.c_str(), nullptr);
-  }
+  const auto kind = format == "ir" ? NAMLibraryFileKind::IR : NAMLibraryFileKind::Model;
+  const auto dir = GetNAMLibraryDirectory(kind);
+  std::error_code ec;
+  std::filesystem::create_directories(dir, ec);
+  if (ec)
+    return {};
   return dir;
 }
 
@@ -191,8 +182,8 @@ void Browser::RunDownloadThread(int toneId, std::string title, std::string forma
     return;
   }
 
-  const std::wstring cacheDir = GetCacheDir();
-  if (cacheDir.empty())
+  const std::filesystem::path installDir = GetInstallDir(format);
+  if (installDir.empty())
   {
     SetDownloadState(toneId, ResultItem::DownloadState::Failed);
     return;
@@ -201,7 +192,7 @@ void Browser::RunDownloadThread(int toneId, std::string title, std::string forma
   const char* extension = (format == "ir") ? ".wav" : ".nam";
   const std::wstring fileName =
     WidenAscii(SanitizeForFilename(title)) + L"_" + WidenAscii(std::to_string(model.id)) + WidenAscii(extension);
-  const std::wstring finalPath = cacheDir + fileName;
+  const std::wstring finalPath = (installDir / fileName).wstring();
 
   if (!WriteFileAtomic(finalPath, fileResponse.body))
   {
