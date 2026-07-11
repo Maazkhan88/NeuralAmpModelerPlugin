@@ -43,7 +43,7 @@ def main():
         files = [
             projectpath
             + "\\build-win\\NeuralAmpModeler.vst3\\Contents\\x86_64-win\\NeuralAmpModeler.vst3",
-            projectpath + "\\build-win\\NeuralAmpModeler_x64.exe",
+            projectpath + "\\build-win\\ToneCast_x64.exe",
         ]
 
     zipname = get_archive_name(projectpath, "win", "demo" if demo == 1 else "full")

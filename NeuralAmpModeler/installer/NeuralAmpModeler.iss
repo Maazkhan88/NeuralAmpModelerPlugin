@@ -1,5 +1,5 @@
 [Setup]
-AppName=NeuralAmpModeler
+AppName=ToneCast
 AppContact=neuralampmodeler@gmail.com
 AppCopyright=Copyright (C) 2022 Steven Atkinson
 AppPublisher=Steven Atkinson
@@ -7,13 +7,13 @@ AppPublisherURL=https://www.neuralampmodeler.com/
 AppSupportURL=https://www.neuralampmodeler.com/
 AppVersion=0.7.14
 VersionInfoVersion=0.7.14
-DefaultDirName={pf}\NeuralAmpModeler
-DefaultGroupName=NeuralAmpModeler
+DefaultDirName={pf}\ToneCast
+DefaultGroupName=ToneCast
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.\..\build-win\installer
 ArchitecturesInstallIn64BitMode=x64
-OutputBaseFilename=NeuralAmpModeler Installer
+OutputBaseFilename=ToneCast Installer
 LicenseFile=license.rtf
 SetupLogging=yes
 ShowComponentSizes=no
@@ -25,8 +25,8 @@ Name: "full"; Description: "Full installation"
 Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Messages]
-WelcomeLabel1=Welcome to the NeuralAmpModeler installer
-SetupWindowTitle=NeuralAmpModeler installer
+WelcomeLabel1=Welcome to the ToneCast installer
+SetupWindowTitle=ToneCast installer
 SelectDirLabel3=The standalone application and supporting files will be installed in the following folder.
 SelectDirBrowseLabel=To continue, click Next. If you would like to select a different folder (not recommended), click Browse.
 
@@ -48,7 +48,7 @@ Name: "{cf64}\VST3\NeuralAmpModeler.vst3\"; Attribs: readonly; Check: Is64BitIns
 
 [Files]
 ;Source: "..\build-win\NeuralAmpModeler_Win32.exe"; DestDir: "{app}"; Check: not Is64BitInstallMode; Components:app; Flags: ignoreversion;
-Source: "..\build-win\NeuralAmpModeler_x64.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Components:app; Flags: ignoreversion;
+Source: "..\build-win\ToneCast_x64.exe"; DestDir: "{app}"; Check: Is64BitInstallMode; Components:app; Flags: ignoreversion;
 Source: "ThirdPartyNotices.txt"; DestDir: "{app}"; Components:app; Flags: ignoreversion;
 
 ;Source: "..\build-win\NeuralAmpModeler_Win32.dll"; DestDir: {code:GetVST2Dir_32}; Check: not Is64BitInstallMode; Components:vst2_32; Flags: ignoreversion;
@@ -78,11 +78,11 @@ Source: "changelog.txt"; DestDir: "{app}"
 Source: "readme-win.rtf"; DestDir: "{app}"; DestName: "readme.rtf"; Flags: isreadme
 
 [Icons]
-Name: "{group}\NeuralAmpModeler"; Filename: "{app}\NeuralAmpModeler_x64.exe"
+Name: "{group}\ToneCast"; Filename: "{app}\ToneCast_x64.exe"
 Name: "{group}\User guide"; Filename: "{app}\NeuralAmpModeler manual.pdf"
 Name: "{group}\Changelog"; Filename: "{app}\changelog.txt"
 ;Name: "{group}\readme"; Filename: "{app}\readme.rtf"
-Name: "{group}\Uninstall NeuralAmpModeler"; Filename: "{app}\unins000.exe"
+Name: "{group}\Uninstall ToneCast"; Filename: "{app}\unins000.exe"
 
 [Code]
 var
