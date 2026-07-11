@@ -140,6 +140,37 @@ public:
   }
 };
 
+class NAMAnalogMeterControl : public IVPeakAvgMeterControl<1>, public IBitmapBase
+{
+public:
+  NAMAnalogMeterControl(const IRECT& bounds, const IVStyle& style, IBitmap bitmap, float lowRangeDB, float highRangeDB)
+  : IVPeakAvgMeterControl<1>(bounds, "", style, EDirection::Vertical, {}, 0, lowRangeDB, highRangeDB, {})
+  , IBitmapBase(bitmap)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+
+  void Draw(IGraphics& g) override
+  {
+    g.DrawFittedBitmap(mBitmap, mRECT);
+
+    const float normalized = Clip(static_cast<float>(GetValue()), 0.f, 1.f);
+    const float angle = -52.f + normalized * 104.f;
+    const float pivotX = mRECT.MW();
+    const float pivotY = mRECT.T + mRECT.H() * 0.79f;
+    const float needleLength = mRECT.W() * 0.34f;
+    float data[2][2];
+    RadialPoints(angle, pivotX, pivotY, 4.f, needleLength, 2, data);
+    g.DrawLine(COLOR_BLACK.WithOpacity(0.45f), data[0][0] + 1.f, data[0][1] + 1.f, data[1][0] + 1.f,
+               data[1][1] + 1.f, &mBlend, 2.5f);
+    g.DrawLine(IColor(255, 35, 27, 20), data[0][0], data[0][1], data[1][0], data[1][1], &mBlend, 1.8f);
+    g.FillCircle(IColor(255, 167, 101, 43), pivotX, pivotY, 4.2f, &mBlend);
+    g.DrawCircle(IColor(255, 39, 28, 19), pivotX, pivotY, 4.2f, &mBlend, 1.f);
+  }
+};
+
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
 {
 public:
@@ -743,9 +774,9 @@ public:
   // docs/decisions-log.md).
   void Draw(IGraphics& g) override
   {
-    const float radius = 4.f;
-    g.FillRoundRect(mStyle.colorSpec.GetColor(kBG), mRECT, radius);
-    g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mRECT, radius, nullptr, 1.f);
+    // The generated rack slot already supplies the background, border and
+    // inset shadow. Drawing a second full rectangle here made the selector
+    // look like it was floating above (and vertically outside) the slot.
   }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override

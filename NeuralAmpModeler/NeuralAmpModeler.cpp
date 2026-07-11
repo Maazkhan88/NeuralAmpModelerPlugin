@@ -144,6 +144,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
     const auto toneCastChassisBitmap = pGraphics->LoadBitmap(TONECAST_CHASSIS_FN);
     const auto toneCastKnobBitmap = pGraphics->LoadBitmap(TONECAST_KNOB_FN);
+    const auto toneCastVUMeterBitmap = pGraphics->LoadBitmap(TONECAST_VU_METER_FN);
     const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
     const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
@@ -174,10 +175,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // Slim vertical meters frame the hardware controls without covering the
     // four decorative brass screws baked into the chassis artwork.
-    const auto inputMeterArea = IRECT(104.f, 238.f, 164.f, 321.f);
-    const auto outputMeterArea = IRECT(704.f, 238.f, 764.f, 321.f);
-    const auto inputMeterLabelArea = IRECT(96.f, 190.f, 172.f, 218.f);
-    const auto outputMeterLabelArea = IRECT(696.f, 190.f, 772.f, 218.f);
+    const auto inputMeterArea = IRECT(83.f, 236.f, 187.f, 306.f);
+    const auto outputMeterArea = IRECT(707.f, 236.f, 811.f, 306.f);
+    const auto inputMeterLabelArea = IRECT(85.f, 311.f, 185.f, 337.f);
+    const auto outputMeterLabelArea = IRECT(709.f, 311.f, 809.f, 337.f);
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
@@ -297,7 +298,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // The knobs
     pGraphics->AttachControl(
-      new NAMKnobControl(inputKnobArea, kInputLevel, "INPUT", hardwareStyle, toneCastKnobBitmap));
+      new NAMKnobControl(inputKnobArea, kInputLevel, "GAIN", hardwareStyle, toneCastKnobBitmap));
     pGraphics->AttachControl(
       new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "GATE", hardwareStyle, toneCastKnobBitmap));
     pGraphics->AttachControl(
@@ -307,19 +308,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMKnobControl(trebleKnobArea, kToneTreble, "TREBLE", hardwareStyle, toneCastKnobBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(
-      new NAMKnobControl(outputKnobArea, kOutputLevel, "OUTPUT", hardwareStyle, toneCastKnobBitmap));
+      new NAMKnobControl(outputKnobArea, kOutputLevel, "MASTER", hardwareStyle, toneCastKnobBitmap));
 
     // The meters
     constexpr float kMeterMin = -70.0f;
     constexpr float kMeterMax = -0.01f;
-    const auto meterStyle = style.WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.8f);
+    const auto meterStyle = hardwareStyle.WithShowLabel(false).WithShowValue(false).WithDrawFrame(false);
     pGraphics->AttachControl(
-      new IVPeakAvgMeterControl<>(inputMeterArea, "", meterStyle, EDirection::Vertical, {}, 0, kMeterMin, kMeterMax,
-                                  {}),
+      new NAMAnalogMeterControl(inputMeterArea, meterStyle, toneCastVUMeterBitmap, kMeterMin, kMeterMax),
       kCtrlTagInputMeter);
     pGraphics->AttachControl(
-      new IVPeakAvgMeterControl<>(outputMeterArea, "", meterStyle, EDirection::Vertical, {}, 0, kMeterMin, kMeterMax,
-                                  {}),
+      new NAMAnalogMeterControl(outputMeterArea, meterStyle, toneCastVUMeterBitmap, kMeterMin, kMeterMax),
       kCtrlTagOutputMeter);
 
     // Settings/help/about box
