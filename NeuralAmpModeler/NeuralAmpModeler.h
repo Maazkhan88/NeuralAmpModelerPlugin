@@ -14,6 +14,16 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
+// ToneCast: tone3000-client/ is standalone-only (networking + OAuth) --
+// see docs/decisions-log.md and CLAUDE.md's architecture rules. APP_API is
+// only defined for the standalone build (see common-win.props APP_DEFS vs
+// VST3_DEFS), and these files are only added to
+// NeuralAmpModeler-app.vcxproj, so this include is unreachable from the
+// VST3 build in two independent ways.
+#ifdef APP_API
+#include "tone3000-client/Tone3000OAuth.h"
+#endif
+
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -325,4 +335,8 @@ private:
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
   NAMSender mInputSender, mOutputSender;
+
+#ifdef APP_API
+  tone3000::OAuthFlow mTone3000Auth;
+#endif
 };

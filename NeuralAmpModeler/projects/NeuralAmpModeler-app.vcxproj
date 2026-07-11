@@ -418,6 +418,24 @@
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\slimmable.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
+    <!-- ToneCast: tone3000-client/ is standalone-only (networking + OAuth).
+         These files must be added ONLY here, never to
+         NeuralAmpModeler-vst3.vcxproj. See docs/decisions-log.md and
+         CLAUDE.md's architecture rules ("tone3000-client... never linked
+         into the VST3 target"). -->
+    <ClCompile Include="..\tone3000-client\Tone3000ApiClient.cpp" />
+    <ClCompile Include="..\tone3000-client\Tone3000Http.cpp" />
+    <ClCompile Include="..\tone3000-client\Tone3000OAuth.cpp" />
+    <ClCompile Include="..\tone3000-client\Tone3000Pkce.cpp" />
+    <ClCompile Include="..\tone3000-client\Tone3000TokenStore.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\tone3000-client\Tone3000ApiClient.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000Config.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000Http.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000OAuth.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000Pkce.h" />
+    <ClInclude Include="..\tone3000-client\Tone3000TokenStore.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\resources\main.rc" />

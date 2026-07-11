@@ -99,6 +99,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
   GetParam(kSlim)->InitDouble("Slim", 0.0, 0.0, 1.0, 0.01);
 
+#ifdef APP_API
+  // Restore a TONE3000 session from a previously-stored refresh token, if
+  // any, without opening a browser. Runs on a background thread (see
+  // Tone3000OAuth.cpp) so this doesn't block plugin construction.
+  mTone3000Auth.TryResume();
+#endif
+
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
   mMakeGraphicsFunc = [&]() {
@@ -367,6 +374,31 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
       ->SetBrowsers(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>(),
                     pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>());
+
+#ifdef APP_API
+    // ToneCast (Phase 4, pulled forward): TONE3000 connect affordance.
+    // Standalone-only -- this whole block compiles out of the VST3 build
+    // (APP_API is undefined there), and the library panel itself has no
+    // tone3000-client reference (see SetConnectHandler's doc comment).
+    static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
+      ->SetConnectHandler(
+        [this]() {
+          const auto status = mTone3000Auth.GetStatus();
+          if (status == tone3000::AuthStatus::SignedOut || status == tone3000::AuthStatus::Failed)
+            mTone3000Auth.BeginLogin();
+        },
+        [this]() -> std::string {
+          switch (mTone3000Auth.GetStatus())
+          {
+            case tone3000::AuthStatus::SignedOut: return "Connect TONE3000";
+            case tone3000::AuthStatus::Connecting: return "Waiting for browser login...";
+            case tone3000::AuthStatus::ExchangingToken: return "Connecting...";
+            case tone3000::AuthStatus::SignedIn: return "TONE3000 connected";
+            case tone3000::AuthStatus::Failed: return "Connect failed -- click to retry";
+          }
+          return "Connect TONE3000";
+        });
+#endif
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
     pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)

@@ -1074,6 +1074,18 @@ public:
     mIRBrowser = irBrowser;
   }
 
+  // ToneCast: generic hook for a TONE3000 connect affordance, deliberately
+  // untyped so this shared-UI class (compiled into both app and VST3) has
+  // no reference to tone3000-client/ (standalone-only, see
+  // Tone3000Config.h). Unset by default -- NeuralAmpModeler.cpp wires this
+  // up only inside an #ifdef APP_API block, so the VST3 build never shows
+  // or references it.
+  void SetConnectHandler(std::function<void()> onClick, std::function<std::string()> statusText)
+  {
+    mOnConnectClick = std::move(onClick);
+    mConnectStatusText = std::move(statusText);
+  }
+
   void OnAttached() override { Recalculate(); }
 
   void Hide(bool hide) override
@@ -1099,6 +1111,15 @@ public:
     g.DrawText(mStyle.valueText.WithAlign(EAlign::Near).WithSize(18.f), "LIBRARY",
                mTitleRect.GetPadded(-12.f, 0.f, 0.f, 0.f));
     DrawCloseGlyph(g, mCloseRect);
+
+    if (mOnConnectClick)
+    {
+      const std::string status = mConnectStatusText ? mConnectStatusText() : std::string("Connect TONE3000");
+      g.FillRoundRect(mStyle.colorSpec.GetColor(kFG), mConnectRect, 4.f);
+      g.DrawRoundRect(ToneCastColors::ACCENT.WithOpacity(0.6f), mConnectRect, 4.f, nullptr, 1.f);
+      g.DrawText(mStyle.valueText.WithAlign(EAlign::Near).WithSize(12.f).WithFGColor(ToneCastColors::ACCENT),
+                 status.c_str(), mConnectRect.GetPadded(-8.f, 0.f, -8.f, 0.f));
+    }
 
     for (size_t i = 0; i < mFilterRects.size(); i++)
     {
@@ -1158,6 +1179,13 @@ public:
     if (mCloseRect.Contains(x, y) || !mSidebarRect.Contains(x, y))
     {
       Hide(true);
+      return;
+    }
+
+    if (mOnConnectClick && mConnectRect.Contains(x, y))
+    {
+      mOnConnectClick();
+      SetDirty(false);
       return;
     }
 
@@ -1345,8 +1373,11 @@ private:
     mTitleRect = mSidebarRect.GetFromTop(40.f);
     mCloseRect = mTitleRect.GetFromRight(40.f).GetPadded(-8.f);
 
+    mConnectRect = IRECT(mSidebarRect.L + 8.f, mTitleRect.B + 2.f, mSidebarRect.R - 8.f, mTitleRect.B + 28.f);
+    const float belowConnect = mOnConnectClick ? mConnectRect.B + 6.f : mTitleRect.B + 4.f;
+
     mFilterRects.clear();
-    float filterTop = mTitleRect.B + 4.f;
+    float filterTop = belowConnect;
     for (int i = 0; i < 6; i++)
     {
       mFilterRects.emplace_back(mSidebarRect.L + 8.f, filterTop, mSidebarRect.R - 8.f, filterTop + 30.f);
@@ -1389,7 +1420,9 @@ private:
   std::vector<LibraryItem> mFiltered;
   std::vector<IRECT> mRowRects, mStarRects, mTypeRects, mFilterRects;
   std::string mFilter;
-  IRECT mSidebarRect, mTitleRect, mCloseRect, mSearchRect, mCountRect, mListRect;
+  IRECT mSidebarRect, mTitleRect, mCloseRect, mConnectRect, mSearchRect, mCountRect, mListRect;
+  std::function<void()> mOnConnectClick;
+  std::function<std::string()> mConnectStatusText;
   float mScrollOffset = 0.f;
   float mRowHeight = 34.f;
   int mHoveredIdx = -1;
