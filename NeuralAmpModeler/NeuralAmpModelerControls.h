@@ -84,6 +84,15 @@ public:
   {
   }
 
+  // ToneCast: plain IControl has no single-click wiring by default -- the
+  // base class's only path to SetDirty(true) (which fires mActionFunc) is
+  // OnMouseDblClick -> SetValueToDefault -> SetDirty(true). Sibling button
+  // classes here (NAMSquareButtonControl/NAMCircleButtonControl) don't hit
+  // this because they extend ISVGButtonControl, which wires up single-click
+  // itself; this one extends IControl directly and was missing that,
+  // which is why it needed two clicks (i.e. a double-click) to open.
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override { SetDirty(true); }
+
   void Draw(IGraphics& g) override
   {
     if (mMouseIsOver)
@@ -1857,7 +1866,14 @@ public:
     const IVStyle leftStyle = style.WithValueText(leftText);
 
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
-    const auto titleArea = GetRECT().GetPadded(-(pad + 10.0f)).GetFromTop(50.0f);
+    // ToneCast: this page's layout predates the persistent header bar
+    // (hamburger/logo/"TONECAST"/gear, always attached in the main layout
+    // at y=[~20,79] and never hidden while this overlay is open) -- the
+    // original y=[30,80] title landed in the exact same band, rendering
+    // "SETTINGS" directly on top of "TONECAST". Shifted down clear of it;
+    // everything below (calibration knobs, Output Mode radio group) is
+    // positioned relative to titleArea, so it shifts down with it.
+    const auto titleArea = GetRECT().GetPadded(-(pad + 10.0f)).GetFromTop(50.0f).GetTranslated(0.f, 65.f);
     AddNamedChildControl(new IVLabelControl(titleArea, "SETTINGS", titleStyle), mControlNames.title);
 
     // Attach input/output calibration controls

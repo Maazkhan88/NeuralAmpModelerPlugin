@@ -220,8 +220,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // avoid stretching the meter bitmap's needle-dial art.
     const auto inputMeterArea = IRECT(89.f, 228.f, 193.f, 298.f);
     const auto outputMeterArea = IRECT(707.f, 228.f, 811.f, 298.f);
-    const auto inputMeterLabelArea = IRECT(91.f, 303.f, 191.f, 329.f);
-    const auto outputMeterLabelArea = IRECT(709.f, 303.f, 809.f, 329.f);
+    // ToneCast: label sat only 5px below the meter, close enough to read as
+    // overlapping the meter bitmap's own bottom bezel ("IN(UT)"/"OUT(UT)").
+    // Widened the gap to 12px.
+    const auto inputMeterLabelArea = IRECT(91.f, 310.f, 191.f, 336.f);
+    const auto outputMeterLabelArea = IRECT(709.f, 310.f, 809.f, 336.f);
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
@@ -261,8 +264,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     };
 
     const IColor hardwareInk(255, 40, 30, 19);
+    // ToneCast: IText(size, color, fontID) always default-constructs with
+    // EVAlign::Middle (see IGraphicsStructs.h) -- this silently overwrote
+    // the EVAlign::Bottom that `style`'s own valueText already had, which
+    // is why the knob value text ("0.0 dB" etc.) was rendering centered
+    // *inside* the knob face instead of below it. WithVAlign restores it.
     const auto hardwareStyle = style.WithLabelText(IText(DEFAULT_TEXT_SIZE + 3.f, hardwareInk, "Roboto-Regular"))
-                                 .WithValueText(IText(DEFAULT_TEXT_SIZE + 2.f, hardwareInk, "Roboto-Regular"))
+                                 .WithValueText(
+                                   IText(DEFAULT_TEXT_SIZE + 2.f, hardwareInk, "Roboto-Regular").WithVAlign(EVAlign::Bottom))
                                  .WithColor(kBG, COLOR_TRANSPARENT)
                                  .WithColor(kX1, hardwareInk)
                                  .WithColor(kX3, ToneCastColors::ACCENT)
