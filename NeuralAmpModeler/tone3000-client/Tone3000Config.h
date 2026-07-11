@@ -12,14 +12,13 @@
 namespace tone3000
 {
 
-// TODO(user): replace with the real client_id once registered at
-// tone3000.com as a developer application. A placeholder here does not
-// leak anything sensitive -- client_id/"Publishable Key" is meant to be
-// public per TONE3000's own docs (it identifies the app in the OAuth
-// flow, it is not a secret). The corresponding Secret Key (t3k_cs_...),
-// if TONE3000 ever issues one for this app, must NEVER be committed here
-// or anywhere in source -- see docs/decisions-log.md.
-constexpr const char* kClientId = "TONECAST_CLIENT_ID_PLACEHOLDER";
+// TONE3000 "Publishable Key" for this app, registered at tone3000.com.
+// This is meant to be public per TONE3000's own docs (it identifies the
+// app in the OAuth flow, it is not a secret). The corresponding Secret
+// Key (t3k_cs_...) must NEVER be committed here or anywhere in source --
+// PKCE is what lets this public/native client skip a client secret
+// entirely -- see docs/decisions-log.md.
+constexpr const char* kClientId = "t3k_pub_PY-3DMnY7WeTNWn55MlVUQnsOG8jeYL6";
 
 constexpr const char* kApiBaseUrl = "https://www.tone3000.com/api/v1";
 constexpr const char* kAuthorizeEndpoint = "https://www.tone3000.com/api/v1/oauth/authorize";
