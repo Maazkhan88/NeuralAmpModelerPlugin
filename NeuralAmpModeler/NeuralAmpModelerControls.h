@@ -3,6 +3,7 @@
 #include <algorithm> // std::transform, std::min
 #include <cmath> // std::round, std::ceil
 #include <cstdio> // FILE, fclose
+#include <cstdint> // uint64_t
 #include <functional> // std::function
 #include <sstream> // std::stringstream
 #include <string> // std::string
@@ -123,23 +124,19 @@ public:
 
   void DrawWidget(IGraphics& g) override
   {
-    float widgetRadius = GetRadius() * 0.73;
     auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
     const float cx = knobRect.MW(), cy = knobRect.MH();
     const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
-    DrawIndicatorTrack(g, angle, cx + 0.5, cy, widgetRadius);
     g.DrawFittedBitmap(mBitmap, knobRect);
+
+    // Draw one pointer after the bitmap. The previous implementation mixed
+    // the bitmap with IVKnob's outer indicator track and fed its radii into a
+    // second helper, which made the orange mark appear detached/misaligned.
+    const float knobRadius = knobRect.W() * 0.5f;
     float data[2][2];
-    RadialPoints(angle, cx, cy, 0.12f * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
-    g.DrawLine(GetColor(mMouseIsOver ? kX3 : kX1), data[0][0], data[0][1], data[1][0], data[1][1], &mBlend,
-               3.f);
-    g.PathCircle(data[1][0], data[1][1], 3);
-    g.PathFill(IPattern::CreateRadialGradient(data[1][0], data[1][1], 4.0f,
-                                              {{GetColor(mMouseIsOver ? kX3 : kX1), 0.f},
-                                               {GetColor(mMouseIsOver ? kX3 : kX1), 0.8f},
-                                               {COLOR_TRANSPARENT, 1.0f}}),
-               {}, &mBlend);
-    g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
+    RadialPoints(angle, cx, cy, 0.12f * knobRadius, 0.52f * knobRadius, 2, data);
+    g.DrawLine(GetColor(kX3), data[0][0], data[0][1], data[1][0], data[1][1], &mBlend, 2.5f);
+    g.FillCircle(GetColor(kX3), data[1][0], data[1][1], 2.25f, &mBlend);
   }
 };
 
@@ -283,6 +280,16 @@ public:
   }
 };
 
+enum class NAMLibraryFilter
+{
+  All,
+  Favorites,
+  RecentlyUsed,
+  MostUsed,
+  RecentlyAdded,
+  Groups
+};
+
 // ToneCast (Task 3.1 follow-up): a searchable, multi-column replacement for
 // the plain native/single-column popup menu that NAMFileBrowserControl used
 // for its model/IR list. Self-contained: draws its own backdrop, search
@@ -302,12 +309,18 @@ public:
   {
     mIgnoreMouse = false;
     for (int i = 0; i < items.GetSize(); i++)
-      mAllItems.push_back({items.Get(i)->GetText(), i});
+    {
+      const std::string name = items.Get(i)->GetText();
+      mAllItems.push_back({name, i});
+      if (sFirstSeen.count(name) == 0)
+        sFirstSeen[name] = ++sSeenCounter;
+    }
     mFiltered = mAllItems;
   }
 
   void OnAttached() override
   {
+    Recalculate();
     RecomputeColumns();
     Recalculate();
   }
@@ -317,6 +330,21 @@ public:
     g.FillRect(COLOR_BLACK.WithOpacity(0.65f), mRECT);
     g.FillRoundRect(mStyle.colorSpec.GetColor(kBG), mPanelRect, 8.f);
     g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mPanelRect, 8.f, nullptr, 1.f);
+
+    g.FillRoundRect(mStyle.colorSpec.GetColor(kFG), mSidebarRect, 6.f);
+    g.DrawText(mStyle.valueText.WithAlign(EAlign::Near).WithSize(18.f), "LIBRARY",
+               mLibraryTitleRect.GetPadded(-12.f, 0.f, 0.f, 0.f));
+    for (size_t i = 0; i < mFilterRects.size(); i++)
+    {
+      const bool active = static_cast<int>(mActiveFilter) == static_cast<int>(i);
+      if (active)
+      {
+        g.FillRoundRect(mStyle.colorSpec.GetColor(kPR), mFilterRects[i], 4.f);
+        g.FillRect(ToneCastColors::ACCENT, mFilterRects[i].GetFromLeft(3.f));
+      }
+      g.DrawText(mStyle.valueText.WithAlign(EAlign::Near), FilterLabel(static_cast<NAMLibraryFilter>(i)),
+                 mFilterRects[i].GetPadded(-14.f, 0.f, -6.f, 0.f));
+    }
 
     g.FillRoundRect(mStyle.colorSpec.GetColor(kFG), mSearchRect, 4.f);
     g.DrawRoundRect(mStyle.colorSpec.GetColor(kFR), mSearchRect, 4.f, nullptr, 1.f);
@@ -341,10 +369,10 @@ public:
       g.PathClipRegion(r);
 
       const bool isFavorite = sFavorites.count(mFiltered[i].first) > 0;
-      const IColor heartColor = isFavorite ? ToneCastColors::ACCENT : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.4f);
-      DrawHeart(g, mHeartRects[i], isFavorite, heartColor);
+      const IColor starColor = isFavorite ? ToneCastColors::ACCENT : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.45f);
+      DrawFavoriteStar(g, mFavoriteRects[i], isFavorite, starColor);
 
-      const IRECT textRect = r.GetReducedFromLeft(mHeartRects[i].W() + 4.f).GetPadded(-4.f, 0.f, -6.f, 0.f);
+      const IRECT textRect = r.GetReducedFromLeft(mFavoriteRects[i].W() + 4.f).GetPadded(-4.f, 0.f, -6.f, 0.f);
       g.DrawText(cellText, TruncateToFit(g, cellText, mFiltered[i].first, textRect.W()).c_str(), textRect);
       g.PathClipRegion(mGridRect);
     }
@@ -356,15 +384,26 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    for (size_t i = 0; i < mFilterRects.size(); i++)
+    {
+      if (mFilterRects[i].Contains(x, y))
+      {
+        mActiveFilter = static_cast<NAMLibraryFilter>(i);
+        ApplyFilter();
+        SetDirty(false);
+        return;
+      }
+    }
+
     if (mSearchRect.Contains(x, y))
     {
       OpenSearchBox();
       return;
     }
 
-    for (size_t i = 0; i < mHeartRects.size(); i++)
+    for (size_t i = 0; i < mFavoriteRects.size(); i++)
     {
-      if (mHeartRects[i].Contains(x, y))
+      if (mFavoriteRects[i].Contains(x, y))
       {
         ToggleFavorite(mFiltered[i].first);
         SetDirty(false);
@@ -375,6 +414,7 @@ public:
     const int idx = HitTestCell(x, y);
     if (idx >= 0)
     {
+      RecordUse(mFiltered[idx].first);
       mOnSelectIndex(mFiltered[idx].second);
       Dismiss();
       return;
@@ -425,34 +465,50 @@ private:
   // Truncate str with a trailing ellipsis until it measures within maxWidth.
   // Needed because filenames routinely overflow a grid-cell column, and an
   // unclipped/untruncated draw bleeds into neighboring cells.
-  // Drawn from two filled circles + a triangle rather than a Unicode glyph
-  // (U+2665/U+2661) — the bundled Roboto/Michroma fonts don't reliably
-  // include those glyphs, which was rendering as nothing at all.
-  static void DrawHeart(IGraphics& g, const IRECT& r, bool filled, const IColor& color)
+  static const char* FilterLabel(NAMLibraryFilter filter)
   {
-    const float cx = r.MW();
-    const float topY = r.T + r.H() * 0.32f;
-    const float lobeR = r.W() * 0.26f;
-    const float leftCx = cx - lobeR * 0.95f;
-    const float rightCx = cx + lobeR * 0.95f;
-    const float tipX = cx;
-    const float tipY = r.B - r.H() * 0.08f;
-    const float baseL = r.L + r.W() * 0.06f;
-    const float baseR = r.R - r.W() * 0.06f;
+    switch (filter)
+    {
+      case NAMLibraryFilter::All: return "All models";
+      case NAMLibraryFilter::Favorites: return "Favorites";
+      case NAMLibraryFilter::RecentlyUsed: return "Recently used";
+      case NAMLibraryFilter::MostUsed: return "Most used";
+      case NAMLibraryFilter::RecentlyAdded: return "Recently added";
+      case NAMLibraryFilter::Groups: return "Groups";
+    }
+    return "All models";
+  }
 
+  static std::string GroupKey(const std::string& name)
+  {
+    const size_t bracketEnd = (!name.empty() && name.front() == '[') ? name.find(']') : std::string::npos;
+    if (bracketEnd != std::string::npos)
+      return name.substr(0, bracketEnd + 1);
+    const size_t split = name.find_first_of(" -_");
+    return name.substr(0, split == std::string::npos ? name.size() : split);
+  }
+
+  static void DrawFavoriteStar(IGraphics& g, const IRECT& r, bool filled, const IColor& color)
+  {
+    constexpr int kPoints = 10;
+    const float outer = std::min(r.W(), r.H()) * 0.34f;
+    const float inner = outer * 0.44f;
+    for (int i = 0; i < kPoints; i++)
+    {
+      const float radius = (i % 2 == 0) ? outer : inner;
+      const float angle = DegToRad(-90.f + static_cast<float>(i) * 36.f);
+      const float x = r.MW() + std::cos(angle) * radius;
+      const float y = r.MH() + std::sin(angle) * radius;
+      if (i == 0)
+        g.PathMoveTo(x, y);
+      else
+        g.PathLineTo(x, y);
+    }
+    g.PathClose();
     if (filled)
-    {
-      g.FillCircle(color, leftCx, topY, lobeR);
-      g.FillCircle(color, rightCx, topY, lobeR);
-      g.FillTriangle(color, baseL, topY, baseR, topY, tipX, tipY);
-    }
+      g.PathFill(color);
     else
-    {
-      g.DrawCircle(color, leftCx, topY, lobeR, nullptr, 1.2f);
-      g.DrawCircle(color, rightCx, topY, lobeR, nullptr, 1.2f);
-      g.DrawLine(color, baseL, topY, tipX, tipY, nullptr, 1.2f);
-      g.DrawLine(color, baseR, topY, tipX, tipY, nullptr, 1.2f);
-    }
+      g.PathStroke(color, 1.25f);
   }
 
   static std::string TruncateToFit(IGraphics& g, const IText& text, const std::string& str, float maxWidth)
@@ -496,14 +552,48 @@ private:
     {
       std::string lowerName = item.first;
       std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
-      if (lowerFilter.empty() || lowerName.find(lowerFilter) != std::string::npos)
+      const bool searchMatch = lowerFilter.empty() || lowerName.find(lowerFilter) != std::string::npos;
+      bool categoryMatch = true;
+      if (mActiveFilter == NAMLibraryFilter::Favorites)
+        categoryMatch = sFavorites.count(item.first) > 0;
+      else if (mActiveFilter == NAMLibraryFilter::RecentlyUsed || mActiveFilter == NAMLibraryFilter::MostUsed)
+        categoryMatch = sUsageCounts[item.first] > 0;
+
+      if (searchMatch && categoryMatch)
         mFiltered.push_back(item);
     }
-    // Favorited items float to the top (stable: otherwise preserves the
-    // scanned order), so favoriting is actually useful for finding things
-    // faster instead of just being a decoration.
-    std::stable_partition(mFiltered.begin(), mFiltered.end(),
-                          [](const auto& item) { return sFavorites.count(item.first) > 0; });
+
+    if (mActiveFilter == NAMLibraryFilter::RecentlyUsed)
+    {
+      std::stable_sort(mFiltered.begin(), mFiltered.end(), [](const auto& a, const auto& b) {
+        return std::find(sRecent.begin(), sRecent.end(), a.first) < std::find(sRecent.begin(), sRecent.end(), b.first);
+      });
+    }
+    else if (mActiveFilter == NAMLibraryFilter::MostUsed)
+    {
+      std::stable_sort(mFiltered.begin(), mFiltered.end(), [](const auto& a, const auto& b) {
+        return sUsageCounts[a.first] == sUsageCounts[b.first] ? a.first < b.first
+                                                              : sUsageCounts[a.first] > sUsageCounts[b.first];
+      });
+    }
+    else if (mActiveFilter == NAMLibraryFilter::RecentlyAdded)
+    {
+      std::stable_sort(mFiltered.begin(), mFiltered.end(),
+                       [](const auto& a, const auto& b) { return sFirstSeen[a.first] > sFirstSeen[b.first]; });
+    }
+    else if (mActiveFilter == NAMLibraryFilter::Groups)
+    {
+      std::stable_sort(mFiltered.begin(), mFiltered.end(), [](const auto& a, const auto& b) {
+        const auto groupA = GroupKey(a.first);
+        const auto groupB = GroupKey(b.first);
+        return groupA == groupB ? a.first < b.first : groupA < groupB;
+      });
+    }
+    else
+    {
+      std::stable_sort(mFiltered.begin(), mFiltered.end(),
+                       [](const auto& a, const auto& b) { return a.first < b.first; });
+    }
     mScrollOffset = 0.f;
     RecomputeColumns();
     Recalculate();
@@ -518,14 +608,23 @@ private:
     ApplyFilter();
   }
 
+  static void RecordUse(const std::string& name)
+  {
+    ++sUsageCounts[name];
+    sRecent.erase(std::remove(sRecent.begin(), sRecent.end(), name), sRecent.end());
+    sRecent.insert(sRecent.begin(), name);
+    if (sRecent.size() > 100)
+      sRecent.resize(100);
+  }
+
   // How many columns fit if every column is wide enough to show the
   // longest name in the current list without truncating it. Only called
   // when the filtered set changes (not on every scroll tick) since
   // MeasureText isn't free over hundreds of items.
   void RecomputeColumns()
   {
-    const float heartW = 24.f;
-    const float cellPad = heartW + 20.f; // heart + text insets
+    const float favoriteW = 24.f;
+    const float cellPad = favoriteW + 20.f;
     float widestText = 90.f; // floor, so a short/empty list doesn't get one giant column
     if (IGraphics* ui = GetUI())
     {
@@ -544,16 +643,27 @@ private:
     // the actual app size"; this is the biggest this overlay can be
     // without literally resizing the platform window.
     mPanelRect = mRECT.GetPadded(-8.f);
-    mSearchRect = mPanelRect.GetFromTop(40.f).GetPadded(-10.f);
-    mGridRect = mPanelRect.GetReducedFromTop(50.f).GetPadded(-10.f);
+    mSidebarRect = mPanelRect.GetFromLeft(182.f).GetPadded(-8.f);
+    mLibraryTitleRect = mSidebarRect.GetFromTop(54.f);
+    mFilterRects.clear();
+    float filterTop = mLibraryTitleRect.B + 8.f;
+    for (int i = 0; i < 6; i++)
+    {
+      mFilterRects.emplace_back(mSidebarRect.L + 6.f, filterTop, mSidebarRect.R - 6.f, filterTop + 38.f);
+      filterTop += 43.f;
+    }
+
+    const auto contentRect = mPanelRect.GetReducedFromLeft(190.f).GetPadded(-10.f);
+    mSearchRect = contentRect.GetFromTop(40.f);
+    mGridRect = contentRect.GetReducedFromTop(50.f);
 
     const float cellW = mGridRect.W() / static_cast<float>(mNumCols);
     const float cellH = 32.f;
-    const float heartW = 24.f;
+    const float favoriteW = 24.f;
     mRowHeight = cellH + 6.f;
 
     mCellRects.clear();
-    mHeartRects.clear();
+    mFavoriteRects.clear();
     for (size_t i = 0; i < mFiltered.size(); i++)
     {
       const int col = static_cast<int>(i) % mNumCols;
@@ -561,7 +671,7 @@ private:
       const float top = mGridRect.T + static_cast<float>(row) * mRowHeight - mScrollOffset;
       const IRECT cell(mGridRect.L + col * cellW + 2.f, top, mGridRect.L + (col + 1) * cellW - 2.f, top + cellH);
       mCellRects.push_back(cell);
-      mHeartRects.push_back(cell.GetFromLeft(heartW).GetPadded(-2.f));
+      mFavoriteRects.push_back(cell.GetFromLeft(favoriteW).GetPadded(-2.f));
     }
   }
 
@@ -582,12 +692,14 @@ private:
   std::vector<std::pair<std::string, int>> mAllItems; // display text, original IPopupMenu::Item index
   std::vector<std::pair<std::string, int>> mFiltered;
   std::vector<IRECT> mCellRects;
-  std::vector<IRECT> mHeartRects; // parallel to mCellRects; left-hand favorite-toggle hit area
+  std::vector<IRECT> mFavoriteRects;
+  std::vector<IRECT> mFilterRects;
   std::string mFilter;
-  IRECT mPanelRect, mSearchRect, mGridRect;
+  IRECT mPanelRect, mSidebarRect, mLibraryTitleRect, mSearchRect, mGridRect;
   float mScrollOffset = 0.f;
   float mRowHeight = 36.f;
   int mHoveredIdx = -1;
+  NAMLibraryFilter mActiveFilter = NAMLibraryFilter::All;
 
   // Session-only favorites, keyed by display name, shared across every
   // instance of this overlay (so favoriting a model persists for the rest
@@ -595,6 +707,10 @@ private:
   // app restart — real persistence belongs to the future file-cache/preset
   // system (tonecast-windows-dev-plan.md Phase 2), not invented ad hoc here.
   static inline std::unordered_set<std::string> sFavorites;
+  static inline std::unordered_map<std::string, int> sUsageCounts;
+  static inline std::unordered_map<std::string, uint64_t> sFirstSeen;
+  static inline std::vector<std::string> sRecent;
+  static inline uint64_t sSeenCounter = 0;
 };
 
 class NAMFileBrowserControl : public IDirBrowseControlBase

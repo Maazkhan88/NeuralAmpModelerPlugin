@@ -123,6 +123,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
 
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+    const auto toneCastLogoSVG = pGraphics->LoadSVG(TONECAST_LOGO_FN);
     const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
     const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
     const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
@@ -150,10 +151,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto b = pGraphics->GetBounds();
     // The generated chassis is composed to the same logical 900x650 canvas:
     // leather header, brushed-brass control plate, and two lower rack slots.
-    const auto titleArea = IRECT(120.f, 24.f, 780.f, 80.f);
-    const auto subtitleArea = IRECT(120.f, 67.f, 780.f, 94.f);
+    const auto logoArea = IRECT(316.f, 36.f, 356.f, 78.f);
+    const auto titleArea = IRECT(358.f, 35.f, 590.f, 79.f);
 
-    const auto knobsArea = IRECT(96.f, 145.f, 804.f, 305.f);
+    const auto knobsArea = IRECT(190.f, 174.f, 710.f, 355.f);
     const auto inputKnobArea = knobsArea.GetGridCell(0, 0, 1, numKnobs).GetPadded(-4.f);
     const auto noiseGateArea = knobsArea.GetGridCell(0, 1, 1, numKnobs).GetPadded(-4.f);
     const auto bassKnobArea = knobsArea.GetGridCell(0, 2, 1, numKnobs).GetPadded(-4.f);
@@ -161,20 +162,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto trebleKnobArea = knobsArea.GetGridCell(0, 4, 1, numKnobs).GetPadded(-4.f);
     const auto outputKnobArea = knobsArea.GetGridCell(0, 5, 1, numKnobs).GetPadded(-4.f);
 
-    const auto ngToggleArea = IRECT(noiseGateArea.L + 12.f, 330.f, noiseGateArea.R - 12.f, 390.f);
-    const auto eqToggleArea = IRECT(midKnobArea.L + 12.f, 330.f, midKnobArea.R - 12.f, 390.f);
+    const auto ngToggleArea = IRECT(noiseGateArea.L + 8.f, 360.f, noiseGateArea.R - 8.f, 414.f);
+    const auto eqToggleArea = IRECT(midKnobArea.L + 8.f, 360.f, midKnobArea.R - 8.f, 414.f);
 
     // File controls sit precisely inside the two generated rack slots.
-    const auto modelArea = IRECT(88.f, 490.f, 812.f, 545.f);
-    const auto irArea = IRECT(88.f, 554.f, 812.f, 609.f);
-    const auto modelIconArea = IRECT(58.f, 501.f, 80.f, 533.f);
-    const auto irSwitchArea = IRECT(57.f, 565.f, 81.f, 597.f);
-    const auto slimIconArea = IRECT(817.f, 503.f, 865.f, 533.f);
+    const auto modelArea = IRECT(94.f, 518.f, 810.f, 565.f);
+    const auto irArea = IRECT(94.f, 578.f, 810.f, 625.f);
+    const auto modelIconArea = IRECT(58.f, 523.f, 88.f, 560.f);
+    const auto irSwitchArea = IRECT(58.f, 583.f, 88.f, 620.f);
+    const auto slimIconArea = IRECT(765.f, 525.f, 805.f, 558.f);
 
     // Slim vertical meters frame the hardware controls without covering the
     // four decorative brass screws baked into the chassis artwork.
-    const auto inputMeterArea = IRECT(61.f, 166.f, 78.f, 390.f);
-    const auto outputMeterArea = IRECT(822.f, 166.f, 839.f, 390.f);
+    const auto inputMeterArea = IRECT(104.f, 238.f, 164.f, 321.f);
+    const auto outputMeterArea = IRECT(704.f, 238.f, 764.f, 321.f);
+    const auto inputMeterLabelArea = IRECT(96.f, 190.f, 172.f, 218.f);
+    const auto outputMeterLabelArea = IRECT(696.f, 190.f, 772.f, 218.f);
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
@@ -216,15 +219,20 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const IColor hardwareInk(255, 40, 30, 19);
     const auto hardwareStyle = style.WithLabelText(IText(DEFAULT_TEXT_SIZE + 3.f, hardwareInk, "Roboto-Regular"))
                                  .WithValueText(IText(DEFAULT_TEXT_SIZE + 2.f, hardwareInk, "Roboto-Regular"))
+                                 .WithColor(kBG, COLOR_TRANSPARENT)
                                  .WithColor(kX1, hardwareInk)
-                                 .WithColor(kX3, ToneCastColors::ACCENT);
-    const auto subtitleStyle = DEFAULT_STYLE
-                                 .WithValueText(IText(10.f, ToneCastColors::FG_TEXT_MUTED, "Roboto-Regular"))
-                                 .WithDrawFrame(false);
+                                 .WithColor(kX3, ToneCastColors::ACCENT)
+                                 .WithDrawFrame(false)
+                                 .WithDrawShadows(false);
+    const auto brandTitleStyle = titleStyle.WithValueText(IText(21.f, ToneCastColors::FG_TEXT, "Michroma-Regular"));
+    const auto hardwareLabelStyle = DEFAULT_STYLE.WithValueText(IText(13.f, hardwareInk, "Roboto-Regular"))
+                                      .WithDrawFrame(false);
 
     pGraphics->AttachControl(new NAMFittedBitmapControl(b, toneCastChassisBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "TONECAST", titleStyle));
-    pGraphics->AttachControl(new IVLabelControl(subtitleArea, "NEURAL AMP PLAYER", subtitleStyle));
+    pGraphics->AttachControl(new ISVGControl(logoArea, toneCastLogoSVG));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "TONECAST", brandTitleStyle));
+    pGraphics->AttachControl(new IVLabelControl(inputMeterLabelArea, "INPUT", hardwareLabelStyle));
+    pGraphics->AttachControl(new IVLabelControl(outputMeterLabelArea, "OUTPUT", hardwareLabelStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -288,16 +296,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new IVSlideSwitchControl(eqToggleArea, kEQActive, "EQ", switchStyle));
 
     // The knobs
-    pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", hardwareStyle, toneCastKnobBitmap));
     pGraphics->AttachControl(
-      new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", hardwareStyle, toneCastKnobBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(bassKnobArea, kToneBass, "", hardwareStyle, toneCastKnobBitmap), -1,
-                             "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMKnobControl(midKnobArea, kToneMid, "", hardwareStyle, toneCastKnobBitmap), -1,
-                             "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMKnobControl(trebleKnobArea, kToneTreble, "", hardwareStyle, toneCastKnobBitmap),
-                             -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", hardwareStyle, toneCastKnobBitmap));
+      new NAMKnobControl(inputKnobArea, kInputLevel, "INPUT", hardwareStyle, toneCastKnobBitmap));
+    pGraphics->AttachControl(
+      new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "GATE", hardwareStyle, toneCastKnobBitmap));
+    pGraphics->AttachControl(
+      new NAMKnobControl(bassKnobArea, kToneBass, "BASS", hardwareStyle, toneCastKnobBitmap), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(
+      new NAMKnobControl(midKnobArea, kToneMid, "MIDDLE", hardwareStyle, toneCastKnobBitmap), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(
+      new NAMKnobControl(trebleKnobArea, kToneTreble, "TREBLE", hardwareStyle, toneCastKnobBitmap), -1, "EQ_KNOBS");
+    pGraphics->AttachControl(
+      new NAMKnobControl(outputKnobArea, kOutputLevel, "OUTPUT", hardwareStyle, toneCastKnobBitmap));
 
     // The meters
     constexpr float kMeterMin = -70.0f;
