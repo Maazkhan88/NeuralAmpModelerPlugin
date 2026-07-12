@@ -444,7 +444,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       auto* panel = pGraphics->GetControlWithTag(kCtrlTagLibraryPanel);
       panel->Hide(!panel->IsHidden());
     }));
-    pGraphics->AttachControl(new NAMLibraryPanelControl(IRECT(0, 0, 300, 650), style), kCtrlTagLibraryPanel)->Hide(true);
+    // Library panel starts hidden and parked at x=1200 (off the 900px canvas).
+    // When shown, Hide(false) resizes the window to 1200 and repositions it to IRECT(900,0,1200,650).
+    pGraphics->AttachControl(new NAMLibraryPanelControl(IRECT(1200, 0, 1500, 650), style), kCtrlTagLibraryPanel)->Hide(true);
     static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
       ->SetBrowsers(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>(),
                     pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>());

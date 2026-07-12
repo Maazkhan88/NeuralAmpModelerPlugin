@@ -374,6 +374,9 @@ enum class NAMRemoteItemState
   Failed
 };
 
+// Model/rig type shown in the library for TONE3000 items.
+enum class NAMRemoteModelType { Unknown, Amp, FullRig, IR, Pedal, Preamp, Other };
+
 struct NAMRemoteItem
 {
   std::string id; // tone id, as a string so this struct stays untyped
@@ -381,7 +384,32 @@ struct NAMRemoteItem
   std::string subtitle; // e.g. "amp · nam"
   bool downloadable = false;
   NAMRemoteItemState state = NAMRemoteItemState::NotDownloaded;
+  NAMRemoteModelType modelType = NAMRemoteModelType::Unknown;
+  int downloads = 0; // download count to display
 };
+
+inline const char* RemoteModelTypeLabel(NAMRemoteModelType t)
+{
+  switch (t)
+  {
+    case NAMRemoteModelType::Amp:     return "AMP";
+    case NAMRemoteModelType::FullRig: return "RIG";
+    case NAMRemoteModelType::IR:      return "IR";
+    case NAMRemoteModelType::Pedal:   return "PEDAL";
+    case NAMRemoteModelType::Preamp:  return "PREAMP";
+    default:                          return "OTHER";
+  }
+}
+
+inline NAMRemoteModelType ParseRemoteModelType(const std::string& s)
+{
+  if (s == "amp")      return NAMRemoteModelType::Amp;
+  if (s == "full_rig" || s == "full rig" || s == "fullrig") return NAMRemoteModelType::FullRig;
+  if (s == "ir")       return NAMRemoteModelType::IR;
+  if (s == "pedal")    return NAMRemoteModelType::Pedal;
+  if (s == "preamp")   return NAMRemoteModelType::Preamp;
+  return NAMRemoteModelType::Other;
+}
 
 // ToneCast: shared library-browsing state and helpers, used by both
 // NAMFileSearchOverlayControl (the per-browser modal opened from the
@@ -1158,41 +1186,21 @@ public:
     if (GetUI() && IsHidden() != hide)
     {
       IGraphics* pGraphics = GetUI();
-      bool shouldShift = false;
-      float shiftAmount = 0.f;
-      int targetWidth = 900;
 
-      if (hide && mControlsAreShifted)
+      if (hide && mIsExpanded)
       {
-        shouldShift = true;
-        shiftAmount = -300.f;
-        targetWidth = 900;
-        mControlsAreShifted = false;
+        // Contract window back to 900px. The panel sits at x=900 so just
+        // resize; existing controls at x<900 are untouched and stay put.
+        pGraphics->Resize(900, 650, pGraphics->GetDrawScale());
+        mIsExpanded = false;
       }
-      else if (!hide && !mControlsAreShifted)
+      else if (!hide && !mIsExpanded)
       {
-        shouldShift = true;
-        shiftAmount = 300.f;
-        targetWidth = 1200;
-        mControlsAreShifted = true;
-      }
-
-      if (shouldShift)
-      {
-        pGraphics->Resize(targetWidth, 650, pGraphics->GetDrawScale());
-
-        for (int i = 0; i < pGraphics->NControls(); i++)
-        {
-          IControl* pControl = pGraphics->GetControl(i);
-          if (pControl == this)
-          {
-          pControl->SetTargetAndDrawRECTs(IRECT(0, 0, 300, 650));
-            Recalculate();
-            continue;
-          }
-
-          pControl->SetTargetAndDrawRECTs(pControl->GetRECT().GetTranslated(shiftAmount, 0.f));
-        }
+        // Expand window 300px to the right. Panel attaches at x=900.
+        pGraphics->Resize(1200, 650, pGraphics->GetDrawScale());
+        SetTargetAndDrawRECTs(IRECT(900, 0, 1200, 650));
+        Recalculate();
+        mIsExpanded = true;
       }
     }
 
@@ -1281,17 +1289,36 @@ public:
           dotColor = IColor(255, 210, 80, 80);
         g.FillCircle(dotColor, mStarRects[i].MW(), mStarRects[i].MH(), 4.f);
 
-        const IColor badgeColor = item.downloadable ? ToneCastColors::ACCENT.WithOpacity(0.75f)
-                                                     : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.5f);
-        g.DrawText(rowText.WithSize(10.f).WithFGColor(badgeColor), item.subtitle.c_str(), mTypeRects[i]);
+        // Model type badge (AMP / RIG / IR / PEDAL / PREAMP)
+        const IColor badgeColor = item.downloadable ? ToneCastColors::ACCENT.WithOpacity(0.80f)
+                                                    : mStyle.colorSpec.GetColor(kX1).WithOpacity(0.5f);
+        const char* typeLabel = (item.modelType != NAMRemoteModelType::Unknown)
+                                  ? RemoteModelTypeLabel(item.modelType)
+                                  : (item.subtitle.empty() ? "" : item.subtitle.c_str());
+        g.DrawText(rowText.WithSize(9.f).WithFGColor(badgeColor), typeLabel, mTypeRects[i]);
 
-        const IRECT actionRect = r.GetFromRight(70.f).GetPadded(-4.f, 0.f, -4.f, 0.f);
+        // Action button on far right (Download / Installed / ...)
+        const IRECT actionRect = r.GetFromRight(62.f).GetPadded(-2.f, 0.f, -4.f, 0.f);
+
+        // Downloads count just left of the action button
+        const IRECT dlRect = r.GetFromRight(92.f).GetReducedFromRight(62.f).GetPadded(-2.f, 0.f, -2.f, 0.f);
+        if (item.downloads > 0)
+        {
+          char dlBuf[16];
+          if (item.downloads >= 1000)
+            std::snprintf(dlBuf, sizeof(dlBuf), "%dk", item.downloads / 1000);
+          else
+            std::snprintf(dlBuf, sizeof(dlBuf), "%d", item.downloads);
+          g.DrawText(rowText.WithSize(9.f).WithFGColor(mStyle.colorSpec.GetColor(kX1).WithOpacity(0.55f)).WithAlign(EAlign::Far),
+                     dlBuf, dlRect);
+        }
+
         const IRECT titleRect = r.GetReducedFromLeft(mStarRects[i].W() + mTypeRects[i].W() + 8.f)
-                                  .GetReducedFromRight(70.f)
+                                  .GetReducedFromRight(92.f)
                                   .GetPadded(-4.f, 0.f, -2.f, 0.f);
         g.DrawText(rowText, TruncateToFit(g, rowText, item.title, titleRect.W()).c_str(), titleRect);
 
-        const char* actionLabel = "Download";
+        const char* actionLabel = "Get";
         IColor actionColor = ToneCastColors::ACCENT;
         if (item.state == NAMRemoteItemState::Downloading)
         {
@@ -1300,7 +1327,7 @@ public:
         }
         else if (item.state == NAMRemoteItemState::Downloaded)
         {
-          actionLabel = "Installed";
+          actionLabel = "Saved";
           actionColor = IColor(255, 90, 200, 110);
         }
         else if (item.state == NAMRemoteItemState::Failed)
@@ -1644,7 +1671,7 @@ private:
   float mRowHeight = 34.f;
   int mHoveredIdx = -1;
   NAMLibraryFilter mActiveFilter = NAMLibraryFilter::All;
-  bool mControlsAreShifted = false;
+  bool mIsExpanded = false;
 };
 
 class NAMMeterControl : public IVPeakAvgMeterControl<>, public IBitmapBase
