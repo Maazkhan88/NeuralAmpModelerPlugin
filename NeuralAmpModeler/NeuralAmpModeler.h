@@ -272,6 +272,8 @@ private:
   void _SetInputGain();
   void _SetOutputGain();
   void _ApplySlimParamToLoadedNAMs();
+  void _UpdateNoiseGateTriggerParams();
+  void _UpdateHighPassFilterParams();
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);

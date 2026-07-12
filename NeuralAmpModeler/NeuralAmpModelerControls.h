@@ -1857,15 +1857,14 @@ public:
   void OnAttached() override
   {
     const float pad = 20.0f;
-    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
+    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, ToneCastColors::FG_TEXT, "Michroma-Regular"))
                                  .WithDrawFrame(false)
                                  .WithShadowOffset(2.f);
-    const auto text = IText(DEFAULT_TEXT_SIZE, EAlign::Center, PluginColors::HELP_TEXT);
+    const auto text = IText(DEFAULT_TEXT_SIZE, EAlign::Center, ToneCastColors::FG_TEXT);
     const auto leftText = text.WithAlign(EAlign::Near);
     const auto style = mStyle.WithDrawFrame(false).WithValueText(text);
     const IVStyle leftStyle = style.WithValueText(leftText);
 
-    AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
     // ToneCast: everything below was laid out relative to GetRECT() (the
     // full 900x650 canvas), on the assumption that mBitmap fills it. It
     // doesn't -- IBitmapControl's Draw() calls IBitmapBase::DrawBitmap(),
@@ -1882,6 +1881,7 @@ public:
     // centering DrawBitmap uses, so it always matches wherever the
     // bitmap actually renders.
     const IRECT cardRect = GetRECT().GetCentredInside(IRECT(0, 0, mBitmap));
+    AddNamedChildControl(new IVPanelControl(cardRect, "", mStyle.WithColor(kFG, ToneCastColors::PANEL).WithColor(kBG, ToneCastColors::BACKGROUND).WithDrawFrame(true).WithShadowOffset(4.f)), mControlNames.bitmap)->SetIgnoreMouse(true);
     const auto titleArea = cardRect.GetPadded(-(pad + 10.0f)).GetFromTop(50.0f);
     AddNamedChildControl(new IVLabelControl(titleArea, "SETTINGS", titleStyle), mControlNames.title);
 
@@ -1904,8 +1904,13 @@ public:
       inputLevelControl->SetTooltip(
         "The analog level, in dBu RMS, that corresponds to digital level of 0 dBFS peak in the host as its signal "
         "enters this plugin.");
+
+      const auto switchStyle = mStyle.WithShowValue(false)
+                                     .WithRoundness(0.666f)
+                                     .WithEmboss(true)
+                                     .WithLabelOrientation(EOrientation::South);
       AddNamedChildControl(
-        new NAMSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", mStyle, mSwitchBitmap),
+        new IVSlideSwitchControl(inputSwitchArea, kCalibrateInput, "Calibrate Input", switchStyle),
         mControlNames.calibrateInput, kCtrlTagCalibrateInput);
 
       // Same-ish height & width as input controls
@@ -1935,7 +1940,7 @@ public:
       static_cast<NAMSettingsPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
     AddNamedChildControl(
-      new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), mControlNames.close);
+      new NAMSquareButtonControl(CornerButtonArea(cardRect), closeAction, mCloseSVG), mControlNames.close);
 
     OnResize();
   }
@@ -1984,7 +1989,8 @@ private:
 
     void Draw(IGraphics& g) override
     {
-      g.DrawFittedBitmap(mBitmap, mRECT);
+      g.FillRoundRect(ToneCastColors::BACKGROUND, mRECT, 4.f);
+      g.DrawRoundRect(ToneCastColors::FRAME, mRECT, 4.f, nullptr, 1.f);
       ITextControl::Draw(g);
     };
 

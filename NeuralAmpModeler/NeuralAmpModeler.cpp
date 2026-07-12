@@ -117,6 +117,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 #endif
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
+  _UpdateNoiseGateTriggerParams();
+  _UpdateHighPassFilterParams();
 
   mMakeGraphicsFunc = [&]() {
 
@@ -560,15 +562,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   sample** triggerOutput = mInputPointers;
   if (noiseGateActive)
   {
-    const double time = 0.01;
-    const double threshold = GetParam(kNoiseGateThreshold)->Value(); // GetParam...
-    const double ratio = 0.1; // Quadratic...
-    const double openTime = 0.005;
-    const double holdTime = 0.01;
-    const double closeTime = 0.05;
-    const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
-    mNoiseGateTrigger.SetParams(triggerParams);
-    mNoiseGateTrigger.SetSampleRate(sampleRate);
     triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
   }
 
@@ -593,12 +586,6 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
 
   // And the HPF for DC offset (Issue 271)
-  const double highPassCutoffFreq = kDCBlockerFrequency;
-  // const double lowPassCutoffFreq = 20000.0;
-  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
-  // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
-  mHighPass.SetParams(highPassParams);
-  // mLowPass.SetParams(lowPassParams);
   sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
@@ -629,6 +616,8 @@ void NeuralAmpModeler::OnReset()
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   mToneStack->Reset(sampleRate, maxBlockSize);
+  _UpdateNoiseGateTriggerParams();
+  _UpdateHighPassFilterParams();
   _UpdateLatency();
 }
 
@@ -760,6 +749,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
     case kSlim: _ApplySlimParamToLoadedNAMs(); break;
+    case kNoiseGateThreshold: _UpdateNoiseGateTriggerParams(); break;
     default: break;
   }
 }
@@ -1238,6 +1228,27 @@ void NeuralAmpModeler::_UpdateLatency()
   {
     SetLatency(latency);
   }
+}
+
+void NeuralAmpModeler::_UpdateNoiseGateTriggerParams()
+{
+  const double time = 0.01;
+  const double threshold = GetParam(kNoiseGateThreshold)->Value();
+  const double ratio = 0.1;
+  const double openTime = 0.005;
+  const double holdTime = 0.01;
+  const double closeTime = 0.05;
+  const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
+  mNoiseGateTrigger.SetParams(triggerParams);
+  mNoiseGateTrigger.SetSampleRate(GetSampleRate());
+}
+
+void NeuralAmpModeler::_UpdateHighPassFilterParams()
+{
+  const double sampleRate = GetSampleRate();
+  const double highPassCutoffFreq = kDCBlockerFrequency;
+  const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
+  mHighPass.SetParams(highPassParams);
 }
 
 void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPointer, const size_t nFrames,
