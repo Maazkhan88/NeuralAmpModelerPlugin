@@ -1158,22 +1158,41 @@ public:
     if (GetUI() && IsHidden() != hide)
     {
       IGraphics* pGraphics = GetUI();
-      int targetWidth = hide ? 900 : 1200;
-      float shiftAmount = hide ? -300.f : 300.f;
+      bool shouldShift = false;
+      float shiftAmount = 0.f;
+      int targetWidth = 900;
 
-      pGraphics->Resize(targetWidth, 650, pGraphics->GetDrawScale());
-
-      for (int i = 0; i < pGraphics->NControls(); i++)
+      if (hide && mControlsAreShifted)
       {
-        IControl* pControl = pGraphics->GetControl(i);
-        if (pControl == this)
-        {
-          pControl->SetTargetAndDrawRECTs(pGraphics->GetBounds());
-          Recalculate();
-          continue;
-        }
+        shouldShift = true;
+        shiftAmount = -300.f;
+        targetWidth = 900;
+        mControlsAreShifted = false;
+      }
+      else if (!hide && !mControlsAreShifted)
+      {
+        shouldShift = true;
+        shiftAmount = 300.f;
+        targetWidth = 1200;
+        mControlsAreShifted = true;
+      }
 
-        pControl->SetTargetAndDrawRECTs(pControl->GetRECT().GetTranslated(shiftAmount, 0.f));
+      if (shouldShift)
+      {
+        pGraphics->Resize(targetWidth, 650, pGraphics->GetDrawScale());
+
+        for (int i = 0; i < pGraphics->NControls(); i++)
+        {
+          IControl* pControl = pGraphics->GetControl(i);
+          if (pControl == this)
+          {
+            pControl->SetTargetAndDrawRECTs(pGraphics->GetBounds());
+            Recalculate();
+            continue;
+          }
+
+          pControl->SetTargetAndDrawRECTs(pControl->GetRECT().GetTranslated(shiftAmount, 0.f));
+        }
       }
     }
 
@@ -1626,6 +1645,7 @@ private:
   float mRowHeight = 34.f;
   int mHoveredIdx = -1;
   NAMLibraryFilter mActiveFilter = NAMLibraryFilter::All;
+  bool mControlsAreShifted = false;
 };
 
 class NAMMeterControl : public IVPeakAvgMeterControl<>, public IBitmapBase
