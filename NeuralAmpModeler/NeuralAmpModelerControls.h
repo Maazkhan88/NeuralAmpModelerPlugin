@@ -1155,9 +1155,34 @@ public:
 
   void Hide(bool hide) override
   {
+    if (GetUI() && IsHidden() != hide)
+    {
+      IGraphics* pGraphics = GetUI();
+      int targetWidth = hide ? 900 : 1200;
+      float shiftAmount = hide ? -300.f : 300.f;
+
+      pGraphics->Resize(targetWidth, 650, pGraphics->GetDrawScale());
+
+      for (int i = 0; i < pGraphics->NControls(); i++)
+      {
+        IControl* pControl = pGraphics->GetControl(i);
+        if (pControl == this)
+        {
+          pControl->SetTargetAndDrawRECTs(pGraphics->GetBounds());
+          Recalculate();
+          continue;
+        }
+
+        pControl->SetTargetAndDrawRECTs(pControl->GetRECT().GetTranslated(shiftAmount, 0.f));
+      }
+    }
+
     IControl::Hide(hide);
     if (!hide)
       RefreshItems();
+
+    if (GetUI())
+      GetUI()->SetAllControlsDirty();
   }
 
   void Draw(IGraphics& g) override
