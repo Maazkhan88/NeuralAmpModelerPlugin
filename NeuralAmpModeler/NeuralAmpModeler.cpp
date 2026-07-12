@@ -369,10 +369,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       // Staged directly (not via the completion handlers) so a file that
       // was since moved or deleted fails silently instead of popping an
       // error dialog on every launch.
-      if (!userSettings.modelPath.empty())
-        _StageModel(WDL_String(userSettings.modelPath.c_str()));
-      if (!userSettings.irPath.empty())
-        _StageIR(WDL_String(userSettings.irPath.c_str()));
+      // ToneCast: disabled to always start in a clean state with no model/IR loaded
+      // if (!userSettings.modelPath.empty())
+      //   _StageModel(WDL_String(userSettings.modelPath.c_str()));
+      // if (!userSettings.irPath.empty())
+      //   _StageIR(WDL_String(userSettings.irPath.c_str()));
     }
 #endif
     // ToneCast (Task 3.1): stock vector-drawn IVControls, no bitmap
@@ -443,7 +444,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       auto* panel = pGraphics->GetControlWithTag(kCtrlTagLibraryPanel);
       panel->Hide(!panel->IsHidden());
     }));
-    pGraphics->AttachControl(new NAMLibraryPanelControl(b, style), kCtrlTagLibraryPanel)->Hide(true);
+    pGraphics->AttachControl(new NAMLibraryPanelControl(IRECT(0, 0, 300, 650), style), kCtrlTagLibraryPanel)->Hide(true);
     static_cast<NAMLibraryPanelControl*>(pGraphics->GetControlWithTag(kCtrlTagLibraryPanel))
       ->SetBrowsers(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->As<NAMFileBrowserControl>(),
                     pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->As<NAMFileBrowserControl>());

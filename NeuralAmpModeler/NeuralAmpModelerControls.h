@@ -1186,7 +1186,7 @@ public:
           IControl* pControl = pGraphics->GetControl(i);
           if (pControl == this)
           {
-            pControl->SetTargetAndDrawRECTs(pGraphics->GetBounds());
+          pControl->SetTargetAndDrawRECTs(IRECT(0, 0, 300, 650));
             Recalculate();
             continue;
           }
@@ -1212,7 +1212,6 @@ public:
     // effectively unclosable depending on exactly where the toggle button
     // sat relative to it. The dim backdrop covers everything; the actual
     // sidebar content only occupies mSidebarRect on the left.
-    g.FillRect(COLOR_BLACK.WithOpacity(0.35f), mRECT);
     g.FillRect(ToneCastColors::BACKGROUND.WithOpacity(0.99f), mSidebarRect);
     g.DrawLine(mStyle.colorSpec.GetColor(kFR), mSidebarRect.R, mSidebarRect.T, mSidebarRect.R, mSidebarRect.B, nullptr,
                1.f);
@@ -1360,7 +1359,7 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (mCloseRect.Contains(x, y) || !mSidebarRect.Contains(x, y))
+    if (mCloseRect.Contains(x, y))
     {
       Hide(true);
       return;
